@@ -45,6 +45,10 @@ services:
   backend:
     build: ./backend
     restart: always
+    # api.telegram.org доступен только по IPv6 (IPv4 режет ТСПУ). Форсируем IPv6,
+    # иначе axios без таймаута иногда выбирает IPv4 и виснет навсегда.
+    extra_hosts:
+      - "api.telegram.org:2001:67c:4e8:f004::9"
     environment:
       DATABASE_URL: postgresql://condr:${DB_PASSWORD}@postgres:5432/condr_faceit
       REDIS_URL: redis://redis:6379

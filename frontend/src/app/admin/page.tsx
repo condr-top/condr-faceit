@@ -485,7 +485,7 @@ export default function AdminPage() {
   const resetStats = async (id: number) => {
     try {
       await api.post(`/admin/users/${id}/reset-stats`)
-      fetchUsers()
+      loadUsers(userPage, userSearch)
     } catch (e: any) {
       alert(e?.response?.data?.message || 'Ошибка')
     }

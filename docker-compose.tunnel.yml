@@ -1,0 +1,105 @@
+version: '3.9'
+
+# ── Режим Cloudflare Tunnel ─────────────────────────────────────────────────
+# Входящие порты НЕ нужны: cloudflared делает исходящее соединение к Cloudflare,
+# а Cloudflare принимает публичный трафик на condrfaceit.ru и гонит его в туннель.
+# SSL терминируется на стороне Cloudflare — nginx/certbot не нужны.
+#
+# Запуск:  docker compose -f docker-compose.tunnel.yml --env-file .env.production up -d --build
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: condr
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: condr_faceit
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U condr -d condr_faceit"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    volumes:
+      - redisdata:/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  backend:
+    build: ./backend
+    restart: always
+    environment:
+      DATABASE_URL: postgresql://condr:${DB_PASSWORD}@postgres:5432/condr_faceit
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      BOT_TOKEN: ${BOT_TOKEN}
+      PUBLIC_URL: ${PUBLIC_URL}
+      FRONTEND_URL: ${PUBLIC_URL}
+      ADMIN_TELEGRAM_IDS: ${ADMIN_TELEGRAM_IDS}
+      ADMIN_CHAT_ID: ${ADMIN_CHAT_ID}
+      TOPIC_PURCHASES: ${TOPIC_PURCHASES}
+      TOPIC_SUPPORT: ${TOPIC_SUPPORT}
+      TOPIC_REPORTS: ${TOPIC_REPORTS}
+      TOPIC_MATCHES: ${TOPIC_MATCHES}
+      CARD_NUMBER: ${CARD_NUMBER}
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID}
+      DISCORD_CATEGORY_ID: ${DISCORD_CATEGORY_ID}
+      PORT: 4000
+    volumes:
+      - uploads:/app/uploads
+    networks:
+      - internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        BACKEND_URL: http://backend:4000
+        NEXT_PUBLIC_WS_URL: ${PUBLIC_URL}
+    restart: always
+    environment:
+      BACKEND_URL: http://backend:4000
+    networks:
+      - internal
+    depends_on:
+      - backend
+
+  # ── Cloudflare Tunnel ────────────────────────────────────────────────────
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: always
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    networks:
+      - internal
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  pgdata:
+  redisdata:
+  uploads:
+
+networks:
+  internal:
+    driver: bridge

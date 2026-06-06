@@ -12,6 +12,10 @@ export const metadata: Metadata = {
   description: 'Competitive matchmaking for Standoff 2',
 }
 
+// Это клиентский Telegram-мини-апп: статический пререндер не нужен и ломается
+// на хуках вроде useSearchParams(). Рендерим все роуты динамически (на запросе).
+export const dynamic = 'force-dynamic'
+
 export const viewport = {
   width: 'device-width',
   initialScale: 1,

@@ -100,7 +100,10 @@ services:
   cloudflared:
     image: cloudflare/cloudflared:latest
     restart: always
-    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    # QUIC (UDP 7844) режется сетью (ТСПУ) — форсируем HTTP/2 поверх TCP/443.
+    command: tunnel --no-autoupdate --protocol http2 run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    environment:
+      TUNNEL_TRANSPORT_PROTOCOL: http2
     networks:
       - internal
     depends_on:

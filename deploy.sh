@@ -73,9 +73,15 @@ echo "  ✓ nginx.conf настроен для $DOMAIN"
 # ── 5. SSL — первый запуск без HTTPS ─────────────────────────────────────────
 echo "[5/6] Получаю SSL-сертификат..."
 
-# Временно запускаем nginx только на 80 (без HTTPS блока) для certbot
-# Через временный конфиг
-cat > /tmp/nginx-certbot.conf << EOF
+# Папки на хосте, которые монтируют и certbot, и nginx из docker-compose.prod.yml
+mkdir -p "$APP_DIR/certbot/www" "$APP_DIR/certbot/conf"
+
+# Если сертификат уже есть — не запрашиваем заново (Let's Encrypt лимитит запросы)
+if [ -d "$APP_DIR/certbot/conf/live/$DOMAIN" ]; then
+  echo "  ✓ Сертификат уже есть, пропускаю выпуск"
+else
+  # Временно запускаем nginx только на 80 для ACME-challenge
+  cat > /tmp/nginx-certbot.conf << EOF
 events { worker_connections 64; }
 http {
   server {
@@ -89,34 +95,30 @@ http {
 }
 EOF
 
-docker run -d --rm --name nginx-temp \
-  -p 80:80 \
-  -v /tmp/nginx-certbot.conf:/etc/nginx/nginx.conf:ro \
-  -v certbot_www_vol:/var/www/certbot \
-  nginx:1.25-alpine 2>/dev/null || true
+  docker rm -f nginx-temp 2>/dev/null || true
+  docker run -d --rm --name nginx-temp \
+    -p 80:80 \
+    -v /tmp/nginx-certbot.conf:/etc/nginx/nginx.conf:ro \
+    -v "$APP_DIR/certbot/www:/var/www/certbot" \
+    nginx:1.25-alpine
 
-sleep 3
+  sleep 3
 
-docker run --rm \
-  -v certbot_conf_vol:/etc/letsencrypt \
-  -v certbot_www_vol:/var/www/certbot \
-  certbot/certbot certonly \
-    --webroot --webroot-path=/var/www/certbot \
-    --non-interactive --agree-tos \
-    --email "$EMAIL" \
-    -d "$DOMAIN"
+  docker run --rm \
+    -v "$APP_DIR/certbot/conf:/etc/letsencrypt" \
+    -v "$APP_DIR/certbot/www:/var/www/certbot" \
+    certbot/certbot certonly \
+      --webroot --webroot-path=/var/www/certbot \
+      --non-interactive --agree-tos \
+      --email "$EMAIL" \
+      -d "$DOMAIN"
 
-docker stop nginx-temp 2>/dev/null || true
-
-echo "  ✓ SSL получен"
+  docker stop nginx-temp 2>/dev/null || true
+  echo "  ✓ SSL получен"
+fi
 
 # ── 6. Запуск приложения ──────────────────────────────────────────────────────
 echo "[6/6] Поднимаю контейнеры..."
-
-# Пробрасываю именованные volume на certbot (docker-compose видит их как certbot_www/certbot_conf)
-# Переименовываем если нужно
-docker volume create certbot_www 2>/dev/null || true
-docker volume create certbot_conf 2>/dev/null || true
 
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
 

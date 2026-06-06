@@ -6,6 +6,7 @@ dist/
 .env
 .env.production
 backups/
+certbot/
 uploads/
 tunnel.log
 tunnel_err.log

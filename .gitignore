@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.next/
+*.log
+*.env.local
+.env
+.env.production
+backups/
+uploads/
+tunnel.log
+tunnel_err.log
+frontend.log
+frontend_err.log
+server.log
+server_err.log

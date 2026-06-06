@@ -1,0 +1,149 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: 'Actay';
+  src: url('/fonts/Actay-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Actay';
+  src: url('/fonts/Actay-RegularItalic.otf') format('opentype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Actay';
+  src: url('/fonts/ActayWide-Bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Actay';
+  src: url('/fonts/ActayWide-BoldItalic.otf') format('opentype');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'ActayCondensed';
+  src: url('/fonts/ActayCondensed-Thin.otf') format('opentype');
+  font-weight: 100;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'ActayCondensed';
+  src: url('/fonts/ActayCondensed-ThinItalic.otf') format('opentype');
+  font-weight: 100;
+  font-style: italic;
+  font-display: swap;
+}
+
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  background-color: #060608;
+  color: #FFFFFF;
+  font-family: 'Actay', sans-serif;
+}
+
+:root {
+  --brand-red: #E8092E;
+  --brand-red-dark: #B80725;
+  --brand-red-glow: rgba(232, 9, 46, 0.35);
+  --dark: #060608;
+  --dark-100: #0d0d10;
+  --dark-200: #111115;
+  --dark-300: #18181d;
+  --dark-400: #222228;
+  --dark-500: #2e2e36;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: var(--dark-200);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--brand-red);
+  border-radius: 2px;
+}
+
+/* Telegram WebApp safe areas */
+.tg-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Red glow effect */
+.red-glow {
+  box-shadow: 0 0 20px var(--brand-red-glow);
+}
+
+.red-border-glow {
+  border: 1px solid var(--brand-red);
+  box-shadow: 0 0 10px var(--brand-red-glow), inset 0 0 10px rgba(232, 9, 46, 0.05);
+}
+
+/* Cyber grid background */
+.cyber-bg {
+  background-color: var(--dark);
+}
+
+/* Clip path for hexagonal cards */
+.hex-clip {
+  clip-path: polygon(10% 0%, 90% 0%, 100% 10%, 100% 90%, 90% 100%, 10% 100%, 0% 90%, 0% 10%);
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-brand-red hover:bg-brand-red-dark text-white font-bold py-3 px-6 rounded transition-all duration-200 active:scale-95;
+  }
+
+  .btn-secondary {
+    @apply bg-dark-300 hover:bg-dark-400 text-white font-bold py-3 px-6 rounded border border-dark-500 transition-all duration-200 active:scale-95;
+  }
+
+  .card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 14px;
+    padding: 16px;
+  }
+
+  .card-hover {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 14px;
+    padding: 16px;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .card-hover:hover {
+    border-color: rgba(232,9,46,0.4);
+    background: rgba(232,9,46,0.04);
+  }
+
+  .tag-elo {
+    @apply text-xs font-bold px-2 py-0.5 rounded;
+  }
+}

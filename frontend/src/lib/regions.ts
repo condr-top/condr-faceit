@@ -1,0 +1,30 @@
+export function countryFlag(code: string): string {
+  if (!code || code.length !== 2) return '🌍'
+  return code.toUpperCase().split('').map(c =>
+    String.fromCodePoint(c.charCodeAt(0) + 127397)
+  ).join('')
+}
+
+export const REGIONS: { code: string; name: string }[] = [
+  { code: 'RU', name: 'Россия' },
+  { code: 'UA', name: 'Украина' },
+  { code: 'KZ', name: 'Казахстан' },
+  { code: 'BY', name: 'Беларусь' },
+  { code: 'UZ', name: 'Узбекистан' },
+  { code: 'AZ', name: 'Азербайджан' },
+  { code: 'AM', name: 'Армения' },
+  { code: 'GE', name: 'Грузия' },
+  { code: 'KG', name: 'Кыргызстан' },
+  { code: 'TJ', name: 'Таджикистан' },
+  { code: 'TM', name: 'Туркменистан' },
+  { code: 'MD', name: 'Молдова' },
+  { code: 'TR', name: 'Турция' },
+  { code: 'DE', name: 'Германия' },
+  { code: 'US', name: 'США' },
+  { code: 'GB', name: 'Великобритания' },
+  { code: 'FR', name: 'Франция' },
+  { code: 'PL', name: 'Польша' },
+  { code: 'BR', name: 'Бразилия' },
+  { code: 'CN', name: 'Китай' },
+  { code: 'OTHER', name: 'Другая' },
+]

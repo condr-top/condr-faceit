@@ -368,9 +368,10 @@ export default function MatchPage() {
             animate={{ boxShadow: [`0 0 0px ${st.color}`, `0 0 10px ${st.color}60`, `0 0 0px ${st.color}`] }}
             transition={{ duration: currentMatch.status === 'in_progress' ? 2 : 999, repeat: Infinity }}
             style={{
-              fontSize: 9, fontWeight: 800, padding: '4px 10px', borderRadius: 20,
+              fontSize: 9, fontWeight: 800, padding: '5px 10px', borderRadius: 20,
               background: st.bg, color: st.color, textTransform: 'uppercase', letterSpacing: '0.06em',
               border: `1px solid ${st.color}40`,
+              whiteSpace: 'nowrap', flexShrink: 0, lineHeight: 1,
             }}
           >{st.label}</motion.span>
         </div>
@@ -554,21 +555,30 @@ export default function MatchPage() {
                       style={{ position: 'absolute', inset: 0, border: '2px solid rgba(232,9,46,0.35)', borderRadius: 16, pointerEvents: 'none' }}
                     />
                   )}
-                  {/* Map name */}
-                  <div style={{
-                    position: 'absolute', bottom: 0, left: 0, right: 0, padding: '10px 12px',
-                    display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between',
-                  }}>
-                    <span style={{ fontSize: 14, fontWeight: 900, color: isMyVetoTurn ? '#fff' : 'rgba(255,255,255,0.4)', letterSpacing: '0.03em', textShadow: '0 1px 6px rgba(0,0,0,0.8)' }}>
+                  {/* VETO badge — фиксированный угол, одинаковый на всех картах */}
+                  {isMyVetoTurn && (
+                    <motion.span
+                      animate={{ opacity: [0.7, 1, 0.7] }}
+                      transition={{ duration: 1.5, repeat: Infinity }}
+                      style={{
+                        position: 'absolute', top: 8, right: 8,
+                        fontSize: 9, lineHeight: 1, color: '#fff', fontWeight: 900,
+                        background: '#E8092E', padding: '5px 9px', borderRadius: 8,
+                        whiteSpace: 'nowrap', letterSpacing: '0.04em',
+                        boxShadow: '0 2px 8px rgba(232,9,46,0.5)',
+                      }}
+                    >✕ ВЕТО</motion.span>
+                  )}
+                  {/* Map name — снизу, обрезается многоточием если длинное */}
+                  <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '10px 12px' }}>
+                    <span style={{
+                      display: 'block', fontSize: 14, fontWeight: 900,
+                      color: isMyVetoTurn ? '#fff' : 'rgba(255,255,255,0.4)',
+                      letterSpacing: '0.03em', textShadow: '0 1px 6px rgba(0,0,0,0.8)',
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                    }}>
                       {map}
                     </span>
-                    {isMyVetoTurn && (
-                      <motion.span
-                        animate={{ opacity: [0.7, 1, 0.7] }}
-                        transition={{ duration: 1.5, repeat: Infinity }}
-                        style={{ fontSize: 9, color: '#fff', fontWeight: 900, background: '#E8092E', padding: '3px 8px', borderRadius: 8, boxShadow: '0 2px 8px rgba(232,9,46,0.5)' }}
-                      >✕ ВЕТО</motion.span>
-                    )}
                   </div>
                 </motion.button>
               ))}

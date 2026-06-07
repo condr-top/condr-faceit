@@ -11,7 +11,7 @@ import { api } from '@/lib/api'
 import { RequireRegistration } from '@/components/providers/RequireRegistration'
 import { Avatar } from '@/components/ui/Avatar'
 import { CoinPurchaseModal } from '@/components/coins/CoinPurchaseModal'
-import { getEloRank } from '@/lib/eloRank'
+import { getEloRank, getRankProgress, ELO_RANKS, CHALLENGER_RANK } from '@/lib/eloRank'
 import { countryFlag } from '@/lib/regions'
 import { RegionPicker } from '@/components/ui/RegionPicker'
 
@@ -249,6 +249,10 @@ export default function ProfilePage() {
 
   const rank = getEloRank(user.elo)
   const isChallenger = myRank !== null && myRank <= 5
+  const theme = isChallenger ? CHALLENGER_RANK : rank
+  const rankProg = Math.round(getRankProgress(user.elo) * 100)
+  const nextRank = ELO_RANKS.find(r => r.min > user.elo) || null
+  const eloToNext = nextRank ? nextRank.min - user.elo : 0
   const xpForNext = Math.pow(user.level, 2) * 100
   const xpPct = Math.min(100, ((user.xp % xpForNext) / xpForNext) * 100)
   const warns = user.warns ?? 0
@@ -265,39 +269,59 @@ export default function ProfilePage() {
             transition={{ type: 'spring', stiffness: 280, damping: 26 }}
             style={{
               paddingTop: 20, marginBottom: 14,
-              background: 'linear-gradient(135deg, rgba(168,85,247,0.10) 0%, rgba(6,6,8,0.95) 60%, rgba(99,102,241,0.07) 100%)',
-              border: '1px solid rgba(168,85,247,0.18)', borderRadius: 20, padding: 18,
+              background: `linear-gradient(150deg, ${theme.color}20 0%, rgba(8,8,11,0.96) 55%, ${theme.color}12 100%)`,
+              border: `1px solid ${theme.color}30`, borderRadius: 22, padding: 18,
               position: 'relative', overflow: 'hidden',
+              boxShadow: `0 12px 44px ${theme.color}16`,
             }}
           >
-            {/* Purple shimmer sweep */}
+            {/* Ambient glow blobs */}
+            <div style={{ position: 'absolute', top: -70, left: -50, width: 200, height: 200, background: `radial-gradient(circle, ${theme.color}33, transparent 70%)`, pointerEvents: 'none' }} />
+            <motion.div animate={{ opacity: [0.35, 0.65, 0.35] }} transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+              style={{ position: 'absolute', bottom: -60, right: -40, width: 180, height: 180, background: `radial-gradient(circle, ${theme.color}26, transparent 70%)`, pointerEvents: 'none' }} />
+            {/* Shimmer sweep */}
             <motion.div
               animate={{ x: ['-100%', '220%'] }}
-              transition={{ duration: 4, repeat: Infinity, ease: 'linear', repeatDelay: 8 }}
+              transition={{ duration: 4, repeat: Infinity, ease: 'linear', repeatDelay: 7 }}
               style={{
                 position: 'absolute', top: 0, bottom: 0, width: '30%',
-                background: 'linear-gradient(90deg, transparent, rgba(168,85,247,0.08), transparent)',
+                background: `linear-gradient(90deg, transparent, ${theme.color}14, transparent)`,
                 pointerEvents: 'none',
               }}
             />
 
-            <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-              {/* Avatar */}
+            <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', position: 'relative' }}>
+              {/* Avatar with rotating rank ring + level badge */}
               <label style={{ position: 'relative', cursor: 'pointer', flexShrink: 0 }}>
-                <div style={{ position: 'relative' }}>
-                  <Avatar
-                    avatarUrl={user.avatarUrl}
-                    name={user.gameNickname || user.firstName}
-                    size={72}
-                    style={{ border: `2px solid rgba(255,255,255,0.1)`, borderRadius: '50%' }}
+                <div style={{ position: 'relative', width: 84, height: 84 }}>
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
+                    style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: `conic-gradient(from 0deg, ${theme.color}, ${theme.color}22, ${theme.color}, ${theme.color}22, ${theme.color})` }}
                   />
-                  {/* Upload overlay */}
+                  <div style={{ position: 'absolute', inset: 3, borderRadius: '50%', overflow: 'hidden', background: '#0a0a0e' }}>
+                    <Avatar
+                      avatarUrl={user.avatarUrl}
+                      name={user.gameNickname || user.firstName}
+                      size={78}
+                      style={{ borderRadius: '50%' }}
+                    />
+                    <div style={{
+                      position: 'absolute', inset: 0, borderRadius: '50%',
+                      background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      opacity: uploadingAvatar ? 1 : 0, transition: 'opacity 0.2s', zIndex: 2,
+                    }}>
+                      <span style={{ fontSize: uploadingAvatar ? 12 : 18 }}>{uploadingAvatar ? '⏳' : '📷'}</span>
+                    </div>
+                  </div>
+                  {/* Level badge */}
                   <div style={{
-                    position: 'absolute', inset: 0, borderRadius: '50%',
-                    background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    opacity: uploadingAvatar ? 1 : 0, transition: 'opacity 0.2s', zIndex: 2,
+                    position: 'absolute', bottom: -2, right: -2, minWidth: 24, height: 24, padding: '0 5px',
+                    borderRadius: 12, background: `linear-gradient(135deg, ${theme.color}, ${theme.color}bb)`,
+                    border: '2px solid #0a0a0e', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 12, fontWeight: 900, color: '#fff', boxShadow: `0 2px 10px ${theme.color}88`, zIndex: 3,
                   }}>
-                    <span style={{ fontSize: uploadingAvatar ? 12 : 18 }}>{uploadingAvatar ? '⏳' : '📷'}</span>
+                    {isChallenger ? '👑' : rank.level}
                   </div>
                 </div>
                 <input type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={handleAvatarChange} disabled={uploadingAvatar} />
@@ -308,8 +332,9 @@ export default function ProfilePage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
                   {user.region && <span style={{ fontSize: 20, flexShrink: 0 }}>{countryFlag(user.region)}</span>}
                   <h1 style={{
-                    fontSize: 20, fontWeight: 900, color: '#fff', margin: 0,
+                    fontSize: 21, fontWeight: 900, color: '#fff', margin: 0,
                     letterSpacing: '-0.5px', lineHeight: 1.2, wordBreak: 'break-word',
+                    textShadow: `0 2px 20px ${theme.color}44`,
                   }}>
                     {user.gameNickname || user.firstName}
                   </h1>
@@ -326,11 +351,13 @@ export default function ProfilePage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <span style={{
                     fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 20,
-                    background: `${rank.color}18`, color: rank.color, border: `1px solid ${rank.color}35`,
-                  }}>{rank.label}</span>
-                  <span style={{ fontSize: 13, fontWeight: 900, color: rank.color }}>{user.elo.toLocaleString()}</span>
+                    background: `${theme.color}1e`, color: theme.color, border: `1px solid ${theme.color}3a`,
+                  }}>{isChallenger ? '👑 Challenger' : theme.label}</span>
+                  <span style={{ fontSize: 14, fontWeight: 900, color: theme.color }}>
+                    <AnimatedNumber value={user.elo} />
+                  </span>
                   {myRank && (
-                    <span style={{ fontSize: 11, color: '#4B5563', fontWeight: 600 }}>#{myRank} в рейтинге</span>
+                    <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 700 }}>#{myRank}</span>
                   )}
                 </div>
 
@@ -355,8 +382,28 @@ export default function ProfilePage() {
               <EloRing elo={user.elo} size={52} isChallenger={isChallenger} />
             </div>
 
+            {/* Rank progress to next */}
+            <div style={{ marginTop: 16, position: 'relative' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                <span style={{ fontSize: 10, color: theme.color, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  {isChallenger ? '👑 Топ рейтинга' : theme.label}
+                </span>
+                <span style={{ fontSize: 10, color: '#6B7280', fontWeight: 600 }}>
+                  {nextRank ? `${eloToNext} ELO до ${nextRank.label}` : 'МАКС. РАНГ'}
+                </span>
+              </div>
+              <div style={{ height: 7, background: 'rgba(255,255,255,0.06)', borderRadius: 4, overflow: 'hidden', position: 'relative' }}>
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${nextRank ? rankProg : 100}%` }}
+                  transition={{ duration: 1.2, ease: 'easeOut', delay: 0.3 }}
+                  style={{ height: '100%', borderRadius: 4, background: `linear-gradient(90deg, ${theme.color}aa, ${theme.color})`, boxShadow: `0 0 10px ${theme.color}88` }}
+                />
+              </div>
+            </div>
+
             {/* XP bar */}
-            <div style={{ marginTop: 14 }}>
+            <div style={{ marginTop: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
                 <span style={{ fontSize: 10, color: '#4B5563', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                   Уровень {user.level}
@@ -367,7 +414,7 @@ export default function ProfilePage() {
                 <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${xpPct}%` }}
-                  transition={{ duration: 1.2, ease: 'easeOut', delay: 0.3 }}
+                  transition={{ duration: 1.2, ease: 'easeOut', delay: 0.45 }}
                   style={{ height: '100%', borderRadius: 3, background: 'linear-gradient(90deg, #6366f1, #A855F7)' }}
                 />
               </div>

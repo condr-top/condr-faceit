@@ -786,6 +786,14 @@ export class MatchesService {
       throw new BadRequestException('Вставьте ссылку на лобби Standoff 2 (link.standoff2.com/…/lobby/join/…)');
     }
 
+    // Если ссылка уже была опубликована — это «изменение». Разрешено только один раз.
+    if (match.lobbyLink) {
+      if (match.lobbyLinkChanged) {
+        throw new BadRequestException('Ссылку можно изменить только один раз');
+      }
+      match.lobbyLinkChanged = true;
+    }
+
     match.lobbyLink = trimmed;
     // Reset join tracking; host is auto-confirmed since they created the lobby
     match.lobbyJoinedPlayers = [userId];

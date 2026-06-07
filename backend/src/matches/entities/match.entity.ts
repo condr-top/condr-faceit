@@ -119,6 +119,10 @@ export class Match {
   @Column({ name: 'lobby_link_published_at', nullable: true, type: 'timestamp' })
   lobbyLinkPublishedAt: Date;
 
+  // Хост может изменить ссылку только один раз после первой публикации
+  @Column({ name: 'lobby_link_changed', default: false })
+  lobbyLinkChanged: boolean;
+
   @Column({ name: 'room_code', nullable: true })
   roomCode: string;
 

@@ -35,6 +35,7 @@ export default function MatchPage() {
   const [players, setPlayers] = useState<Record<number, { gameNickname: string; gameId: string }>>({})
   const [lobbyLinkInput, setLobbyLinkInput] = useState('')
   const [lobbyLinkSaving, setLobbyLinkSaving] = useState(false)
+  const [lobbyEditing, setLobbyEditing] = useState(false)
   const [submitUnlockSecondsLeft, setSubmitUnlockSecondsLeft] = useState<number | null>(null)
   const [resultDeadlineLeft, setResultDeadlineLeft] = useState<number | null>(null)
 
@@ -196,6 +197,8 @@ export default function MatchPage() {
     setLobbyLinkSaving(true)
     try {
       await api.post(`/matches/${id}/lobby-link`, { link: val })
+      setLobbyEditing(false)
+      setLobbyLinkInput('')
     } catch (e: any) {
       alert(e?.response?.data?.message || 'Ошибка')
     } finally {
@@ -659,7 +662,7 @@ export default function MatchPage() {
               </div>
 
               {hostId === user.id ? (
-                currentMatch.lobbyLink ? (
+                (currentMatch.lobbyLink && !lobbyEditing) ? (
                   <div>
                     <div style={{ fontSize: 11, color: 'rgba(234,179,8,0.6)', marginBottom: 6 }}>🔗 Ссылка опубликована:</div>
                     <div style={{
@@ -669,17 +672,21 @@ export default function MatchPage() {
                     }}>
                       {currentMatch.lobbyLink}
                     </div>
-                    <button
-                      onClick={() => setLobbyLinkInput(currentMatch.lobbyLink || '')}
-                      style={{ background: 'none', border: 'none', color: '#374151', fontSize: 11, cursor: 'pointer', padding: 0 }}
-                    >
-                      ✏️ Изменить ссылку
-                    </button>
+                    {!(currentMatch as any).lobbyLinkChanged ? (
+                      <button
+                        onClick={() => { setLobbyLinkInput(currentMatch.lobbyLink || ''); setLobbyEditing(true) }}
+                        style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 11, cursor: 'pointer', padding: 0 }}
+                      >
+                        ✏️ Изменить ссылку (можно один раз)
+                      </button>
+                    ) : (
+                      <span style={{ color: '#374151', fontSize: 11 }}>Ссылку уже меняли (изменение доступно один раз)</span>
+                    )}
                   </div>
                 ) : (
                   <div>
                     <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 6 }}>
-                      📋 Вставьте ссылку на лобби:
+                      {lobbyEditing ? '✏️ Новая ссылка на лобби (таймер и список зашедших сбросятся):' : '📋 Вставьте ссылку на лобби:'}
                     </div>
                     <div style={{ display: 'flex', gap: 6 }}>
                       <input
@@ -700,9 +707,17 @@ export default function MatchPage() {
                           cursor: 'pointer', opacity: lobbyLinkSaving || !lobbyLinkInput.trim() ? 0.5 : 1,
                         }}
                       >
-                        {lobbyLinkSaving ? '...' : 'Опубликовать'}
+                        {lobbyLinkSaving ? '...' : (lobbyEditing ? 'Сохранить' : 'Опубликовать')}
                       </button>
                     </div>
+                    {lobbyEditing && (
+                      <button
+                        onClick={() => { setLobbyEditing(false); setLobbyLinkInput('') }}
+                        style={{ background: 'none', border: 'none', color: '#6B7280', fontSize: 11, cursor: 'pointer', padding: '8px 0 0' }}
+                      >
+                        Отмена
+                      </button>
+                    )}
                   </div>
                 )
               ) : (
@@ -795,19 +810,18 @@ export default function MatchPage() {
                   const hasDiscord = !!(user as any).discordUsername
 
                   if (!hasDiscord) return (
-                    <a
-                      href="/profile"
+                    <div
                       style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                        background: 'rgba(255,255,255,0.04)',
-                        border: '1px solid rgba(255,255,255,0.08)',
+                        background: 'rgba(255,255,255,0.03)',
+                        border: '1px solid rgba(255,255,255,0.06)',
                         borderRadius: 10, padding: '10px 14px',
                         color: '#4B5563', fontWeight: 700, fontSize: 12,
-                        textDecoration: 'none',
+                        cursor: 'default', userSelect: 'none', opacity: 0.7,
                       }}
                     >
-                      🔒 Привяжи Discord в профиле для голосового чата
-                    </a>
+                      🔒 Discord не привязан — голосовой чат недоступен
+                    </div>
                   )
 
                   return voiceLink ? (

@@ -240,8 +240,8 @@ export default function MatchPage() {
 
   if (!currentMatch || !user) return null
 
-  // Map image helper — files uploaded as Prison.jpg, Sandstone.jpg etc.
-  const mapImg = (name: string) => `/maps/${name.charAt(0).toUpperCase()}${name.slice(1).toLowerCase()}.jpg`
+  // Map image helper — WebP for fast loading (converted from JPG, ~78% smaller)
+  const mapImg = (name: string) => `/maps/${name.charAt(0).toUpperCase()}${name.slice(1).toLowerCase()}.webp`
 
   const playerName = (pid: number) => players[pid]?.gameNickname || `Игрок ${pid}`
   const hostId = currentMatch.hostId

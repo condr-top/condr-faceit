@@ -32,9 +32,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <TelegramProvider>
           <SwipeNavProvider>
             <NavigationProgress />
-            <BetaBanner />
             {children}
           </SwipeNavProvider>
+          {/* Вне SwipeNavProvider — иначе попадает в его stacking-context (zIndex:1)
+              и оказывается под навбаром (zIndex:40). Здесь — поверх всего. */}
+          <BetaBanner />
         </TelegramProvider>
       </body>
     </html>

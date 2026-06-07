@@ -22,7 +22,7 @@ export function BetaBanner() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             style={{
-              position: 'fixed', inset: 0, zIndex: 999,
+              position: 'fixed', inset: 0, zIndex: 100000,
               background: 'rgba(0,0,0,0.55)',
               backdropFilter: 'blur(4px)',
             }}
@@ -35,7 +35,7 @@ export function BetaBanner() {
             exit={{ y: '100%', opacity: 0 }}
             transition={{ type: 'spring', damping: 28, stiffness: 300 }}
             style={{
-              position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 1000,
+              position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100001,
               background: 'rgba(18,18,26,0.97)',
               backdropFilter: 'blur(24px) saturate(180%)',
               borderTop: '1px solid rgba(255,255,255,0.1)',

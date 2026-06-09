@@ -314,15 +314,6 @@ export default function ProfilePage() {
                       <span style={{ fontSize: uploadingAvatar ? 12 : 18 }}>{uploadingAvatar ? '⏳' : '📷'}</span>
                     </div>
                   </div>
-                  {/* Level badge */}
-                  <div style={{
-                    position: 'absolute', bottom: -2, right: -2, minWidth: 24, height: 24, padding: '0 5px',
-                    borderRadius: 12, background: `linear-gradient(135deg, ${theme.color}, ${theme.color}bb)`,
-                    border: '2px solid #0a0a0e', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 12, fontWeight: 900, color: '#fff', boxShadow: `0 2px 10px ${theme.color}88`, zIndex: 3,
-                  }}>
-                    {isChallenger ? '👑' : rank.level}
-                  </div>
                 </div>
                 <input type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={handleAvatarChange} disabled={uploadingAvatar} />
               </label>
@@ -378,18 +369,15 @@ export default function ProfilePage() {
                 )}
               </div>
 
-              {/* EloRing */}
-              <EloRing elo={user.elo} size={52} isChallenger={isChallenger} />
+              {/* Rank emblem — кольцо + число (без подписи, чтобы не дублировать «Level X») */}
+              <EloRing elo={user.elo} size={58} isChallenger={isChallenger} showLabel={false} />
             </div>
 
             {/* Rank progress to next */}
             <div style={{ marginTop: 16, position: 'relative' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                <span style={{ fontSize: 10, color: theme.color, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                  {isChallenger ? '👑 Топ рейтинга' : theme.label}
-                </span>
+              <div style={{ textAlign: 'right', marginBottom: 5 }}>
                 <span style={{ fontSize: 10, color: '#6B7280', fontWeight: 600 }}>
-                  {nextRank ? `${eloToNext} ELO до ${nextRank.label}` : 'МАКС. РАНГ'}
+                  {nextRank ? `${eloToNext} ELO до ${nextRank.label}` : '👑 Макс. ранг'}
                 </span>
               </div>
               <div style={{ height: 7, background: 'rgba(255,255,255,0.06)', borderRadius: 4, overflow: 'hidden', position: 'relative' }}>

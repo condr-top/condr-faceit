@@ -14,3 +14,4 @@ frontend.log
 frontend_err.log
 server.log
 server_err.log
+cloudflared.exe

@@ -17,7 +17,7 @@ interface EloRingProps {
 export function EloRing({ elo, size = 64, isChallenger = false, showLabel = true }: EloRingProps) {
   const rank = isChallenger ? CHALLENGER_RANK : getEloRank(elo)
   const { color, label } = rank
-  const img = isChallenger ? '/ranks/challenger.webp' : `/ranks/${rank.level}.webp`
+  const img = isChallenger ? '/ranks/challenger.jpg' : `/ranks/${rank.level}.jpg`
   const labelSize = size < 50 ? 8 : 9
 
   return (

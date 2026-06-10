@@ -444,12 +444,19 @@ export class MatchesService {
   }
 
   private async createMatchPlayers(match: Match): Promise<void> {
+    // Идемпотентно: если строки уже есть (повторный вызов / гонка при вето) —
+    // не создаём дубли, иначе матч задваивается в истории и стата/ELO
+    // раскидываются по разным строкам.
+    const existing = await this.playerRepo.find({ where: { matchId: match.id } });
+    const have = new Set(existing.map((p) => p.userId));
+
     const players = [
       ...match.teamAIds.map((id) => ({ userId: id, team: 'A' })),
       ...match.teamBIds.map((id) => ({ userId: id, team: 'B' })),
     ];
 
     for (const p of players) {
+      if (have.has(p.userId)) continue;
       const user = await this.userRepo.findOne({ where: { id: p.userId } });
       await this.playerRepo.save(
         this.playerRepo.create({
@@ -860,38 +867,40 @@ export class MatchesService {
   async getMatchHistory(userId: number, page = 1, limit = 10) {
     const skip = (page - 1) * limit;
 
-    // Only count COMPLETED matches (exclude cancelled / in-progress)
     const allPlayerRows = await this.playerRepo.find({ where: { userId } });
-    const allMatchIds   = allPlayerRows.map((p) => p.matchId);
-    if (!allMatchIds.length) return { matches: [], total: 0, page, limit };
+    if (!allPlayerRows.length) return { matches: [], total: 0, page, limit };
 
+    const allMatchIds = [...new Set(allPlayerRows.map((p) => p.matchId))];
     const completedMatches = await this.matchRepo.findBy({
       id: In(allMatchIds),
       status: MatchStatus.COMPLETED,
     });
+    const matchMap = Object.fromEntries(completedMatches.map((m) => [m.id, m]));
     const completedIds = new Set(completedMatches.map((m) => m.id));
-    const total = completedIds.size;
-    if (!total) return { matches: [], total: 0, page, limit };
 
-    // Fetch paginated player rows for completed matches only, newest first
-    const playerRows = await this.playerRepo
-      .createQueryBuilder('mp')
-      .where('mp.userId = :userId', { userId })
-      .orderBy('mp.createdAt', 'DESC')
-      .getMany()
-      .then((rows) => rows.filter((r) => completedIds.has(r.matchId)).slice(skip, skip + limit));
+    // Схлопываем возможные дубли строк одного матча (легаси-баг createMatchPlayers):
+    // мерджим стату и ELO, чтобы матч был ОДИН.
+    const byMatch = new Map<number, any[]>();
+    for (const r of allPlayerRows) {
+      if (!completedIds.has(r.matchId)) continue;
+      const arr = byMatch.get(r.matchId) ?? [];
+      arr.push(r);
+      byMatch.set(r.matchId, arr);
+    }
 
-    const matchIds = playerRows.map((p) => p.matchId);
-    const matches  = completedMatches.filter((m) => matchIds.includes(m.id));
-    const matchMap = Object.fromEntries(matches.map((m) => [m.id, m]));
+    // Берём значение с наибольшим модулем (реальная строка vs нулевой дубль;
+    // корректно для отрицательного eloChange)
+    const pick = (rows: any[], f: string): number =>
+      rows.reduce((acc, r) => (Math.abs(Number(r[f] ?? 0)) > Math.abs(acc) ? Number(r[f] ?? 0) : acc), 0);
 
-    const result = playerRows.map((mp) => {
-      const m = matchMap[mp.matchId];
-      if (!m) return null;
+    const merged = [...byMatch.entries()].map(([matchId, rows]) => {
+      const m = matchMap[matchId];
       const isTeamA = m.teamAIds.includes(userId);
-      const won =
-        (isTeamA  && m.winnerTeam === 'A') ||
-        (!isTeamA && m.winnerTeam === 'B');
+      const won = (isTeamA && m.winnerTeam === 'A') || (!isTeamA && m.winnerTeam === 'B');
+      const createdAt = rows.reduce(
+        (a, r) => (new Date(r.createdAt) < new Date(a) ? r.createdAt : a),
+        rows[0].createdAt,
+      );
       return {
         matchId:     m.id,
         map:         m.map ?? null,
@@ -900,22 +909,22 @@ export class MatchesService {
         result:      m.winnerTeam === 'draw' ? 'draw' : won ? 'win' : 'loss',
         team:        isTeamA ? 'A' : 'B',
         totalRounds: m.totalRounds ?? 0,
-        createdAt:   m.createdAt,
-        eloChange:   mp.eloChange,
-        // raw stats
-        kills:   mp.kills,
-        deaths:  mp.deaths,
-        assists: mp.assists,
-        // per-match calculated stats
-        kdMatch:    mp.kdMatch,
-        kprMatch:   mp.kprMatch,
-        aprMatch:   mp.aprMatch,
-        srMatch:    mp.srMatch,
-        ratingMatch: mp.ratingMatch,
+        createdAt,
+        eloChange:   pick(rows, 'eloChange'),
+        kills:       pick(rows, 'kills'),
+        deaths:      pick(rows, 'deaths'),
+        assists:     pick(rows, 'assists'),
+        kdMatch:     pick(rows, 'kdMatch'),
+        kprMatch:    pick(rows, 'kprMatch'),
+        aprMatch:    pick(rows, 'aprMatch'),
+        srMatch:     pick(rows, 'srMatch'),
+        ratingMatch: pick(rows, 'ratingMatch'),
         kdSubmitted: m.kdSubmitted,
       };
-    }).filter(Boolean);
+    });
 
-    return { matches: result, total, page, limit };
+    merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const total = merged.length;
+    return { matches: merged.slice(skip, skip + limit), total, page, limit };
   }
 }

@@ -39,6 +39,9 @@ export function Flag({ code, size = 14, style }: FlagProps) {
         verticalAlign: 'middle',
         flexShrink: 0,
         userSelect: 'none',
+        // Оптическая поправка: у текста снизу запас под выносные элементы,
+        // из-за этого флаг по геометрическому центру кажется ниже строки
+        transform: 'translateY(-1px)',
         ...style,
       }}
     />

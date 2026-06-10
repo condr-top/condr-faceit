@@ -56,33 +56,20 @@ export default function AuthPage() {
         {/* Logo */}
         <div style={{ marginBottom: 32 }}>
           <motion.div
-            animate={{
-              boxShadow: [
-                '0 0 10px rgba(232,9,46,0.3)',
-                '0 0 50px rgba(232,9,46,0.7)',
-                '0 0 10px rgba(232,9,46,0.3)',
-              ],
-            }}
-            transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
-            style={{
-              width: 96, height: 96, borderRadius: 24,
-              background: 'linear-gradient(135deg, rgba(232,9,46,0.2), rgba(180,0,30,0.3))',
-              border: '1px solid rgba(232,9,46,0.4)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              margin: '0 auto 24px',
-              position: 'relative', overflow: 'hidden',
-            }}
+            animate={{ scale: [1, 1.04, 1] }}
+            transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+            style={{ margin: '0 auto 26px', width: 'fit-content' }}
           >
-            {/* Inner shimmer */}
             <motion.div
-              animate={{ x: ['-100%', '200%'] }}
-              transition={{ duration: 2, repeat: Infinity, repeatDelay: 1 }}
-              style={{
-                position: 'absolute', top: 0, bottom: 0, width: '50%',
-                background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent)',
-              }}
-            />
-            <Logo size={54} color="#fff" style={{ position: 'relative', filter: 'drop-shadow(0 2px 10px rgba(232,9,46,0.6))' }} />
+              animate={{ filter: [
+                'drop-shadow(0 0 14px rgba(232,9,46,0.35))',
+                'drop-shadow(0 0 46px rgba(232,9,46,0.85))',
+                'drop-shadow(0 0 14px rgba(232,9,46,0.35))',
+              ] }}
+              transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              <Logo size={150} color="#fff" />
+            </motion.div>
           </motion.div>
 
           <h1 style={{ fontSize: 40, fontWeight: 900, color: '#fff', margin: '0 0 8px', letterSpacing: '-1px' }}>CONDR</h1>

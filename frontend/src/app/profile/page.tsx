@@ -293,7 +293,7 @@ export default function ProfilePage() {
             <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', position: 'relative' }}>
               {/* Avatar with rotating rank ring + level badge */}
               <label style={{ position: 'relative', cursor: 'pointer', flexShrink: 0 }}>
-                <div style={{ position: 'relative', width: 84, height: 84 }}>
+                <div style={{ position: 'relative', width: 72, height: 72 }}>
                   <motion.div
                     animate={{ rotate: 360 }}
                     transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
@@ -303,7 +303,7 @@ export default function ProfilePage() {
                     <Avatar
                       avatarUrl={user.avatarUrl}
                       name={user.gameNickname || user.firstName}
-                      size={78}
+                      size={66}
                       style={{ borderRadius: '50%' }}
                     />
                     <div style={{
@@ -320,11 +320,12 @@ export default function ProfilePage() {
 
               {/* Name + rank info */}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
-                  {user.region && <Flag code={user.region} size={15} />}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', marginBottom: 4, minWidth: 0 }}>
+                  {user.region && <Flag code={user.region} size={14} />}
                   <h1 style={{
-                    fontSize: 21, fontWeight: 900, color: '#fff', margin: 0,
-                    letterSpacing: '-0.5px', lineHeight: 1.2, wordBreak: 'break-word',
+                    fontSize: 19, fontWeight: 900, color: '#fff', margin: 0,
+                    letterSpacing: '-0.5px', lineHeight: 1.2, minWidth: 0,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     textShadow: `0 2px 20px ${theme.color}44`,
                   }}>
                     {user.gameNickname || user.firstName}
@@ -339,10 +340,11 @@ export default function ProfilePage() {
                 )}
 
                 {/* Rank + position */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', minWidth: 0 }}>
                   <span style={{
                     fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 20,
                     background: `${theme.color}1e`, color: theme.color, border: `1px solid ${theme.color}3a`,
+                    whiteSpace: 'nowrap', flexShrink: 0,
                   }}>{isChallenger ? '👑 Challenger' : theme.label}</span>
                   <span style={{ fontSize: 14, fontWeight: 900, color: theme.color }}>
                     <AnimatedNumber value={user.elo} />
@@ -370,7 +372,7 @@ export default function ProfilePage() {
               </div>
 
               {/* Rank emblem — кольцо + число (без подписи, чтобы не дублировать «Level X») */}
-              <EloRing elo={user.elo} size={58} isChallenger={isChallenger} showLabel={false} />
+              <EloRing elo={user.elo} size={52} isChallenger={isChallenger} showLabel={false} />
             </div>
 
             {/* Rank progress to next */}

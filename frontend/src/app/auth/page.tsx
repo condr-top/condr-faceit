@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { useAuthStore } from '@/store/authStore'
+import { Logo } from '@/components/ui/Logo'
 
 export default function AuthPage() {
   const { login, isAuthenticated, isLoading } = useAuthStore()
@@ -81,7 +82,7 @@ export default function AuthPage() {
                 background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent)',
               }}
             />
-            <span style={{ fontSize: 48, fontWeight: 900, color: '#E8092E', position: 'relative' }}>C</span>
+            <Logo size={54} color="#fff" style={{ position: 'relative', filter: 'drop-shadow(0 2px 10px rgba(232,9,46,0.6))' }} />
           </motion.div>
 
           <h1 style={{ fontSize: 40, fontWeight: 900, color: '#fff', margin: '0 0 8px', letterSpacing: '-1px' }}>CONDR</h1>

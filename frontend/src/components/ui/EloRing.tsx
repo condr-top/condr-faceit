@@ -18,7 +18,10 @@ interface EloRingProps {
 export function EloRing({ elo, size = 64, isChallenger = false, showLabel = true }: EloRingProps) {
   const rank = isChallenger ? CHALLENGER_RANK : getEloRank(elo)
   const { color, label } = rank
-  const img = isChallenger ? '/ranks/challenger.jpg' : `/ranks/${rank.level}.jpg`
+  // ?v= — cache-bust: у статики max-age 4ч, без смены URL клиенты
+  // (Telegram webview) держат старую картинку после обновления набора
+  const RANKS_V = 2
+  const img = isChallenger ? `/ranks/challenger.jpg?v=${RANKS_V}` : `/ranks/${rank.level}.jpg?v=${RANKS_V}`
   const labelSize = size < 50 ? 8 : 9
 
   // Рамка: тонкое градиентное кольцо в цвет ранга + тёмная подложка

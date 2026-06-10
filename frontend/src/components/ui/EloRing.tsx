@@ -21,8 +21,10 @@ export function EloRing({ elo, size = 64, isChallenger = false, showLabel = true
   const img = isChallenger ? '/ranks/challenger.jpg' : `/ranks/${rank.level}.jpg`
   const labelSize = size < 50 ? 8 : 9
 
-  // Плавное растворение края: непрозрачно до ~72%, к 96% — в ноль
-  const feather = 'radial-gradient(circle, #000 72%, transparent 96%)'
+  // Плавное растворение края. closest-side обязателен: без него радиус
+  // градиента тянется до УГЛА квадрата и маска не доходит до краёв
+  // (получается видимый чёрный квадрат на тонированном фоне).
+  const feather = 'radial-gradient(circle closest-side, #000 78%, transparent 99%)'
 
   return (
     <div className="flex flex-col items-center gap-1">

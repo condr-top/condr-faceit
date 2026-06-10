@@ -16,6 +16,7 @@ import { connectSocket } from '@/lib/socket'
 import { getEloRank } from '@/lib/eloRank'
 import { Avatar } from '@/components/ui/Avatar'
 import { Flag } from '@/components/ui/Flag'
+import { Icon, IconName } from '@/components/ui/Icon'
 import { playQueueJoin, playQueueLeave, playMatchFound } from '@/lib/sounds'
 import { useUiStore } from '@/store/uiStore'
 
@@ -35,7 +36,7 @@ function AnimatedNumber({ value, duration = 1.2 }: { value: number; duration?: n
 function TiltCard({
   icon, label, sub, color, glow, delay, onClick,
 }: {
-  icon: string; label: string; sub: string; href: string
+  icon: IconName; label: string; sub: string; href: string
   color: string; glow: string; delay: number; onClick: () => void
 }) {
   const cardRef  = useRef<HTMLButtonElement>(null)
@@ -97,11 +98,11 @@ function TiltCard({
         }} />
 
         <div style={{
-          position: 'absolute', top: -16, right: -8, fontSize: 54, opacity: 0.07,
+          position: 'absolute', top: -14, right: -10, opacity: 0.10,
           lineHeight: 1, userSelect: 'none', pointerEvents: 'none',
-        }}>{icon}</div>
+        }}><Icon name={icon} size={58} color={color} /></div>
 
-        <div style={{ fontSize: 26, marginBottom: 8, position: 'relative' }}>{icon}</div>
+        <div style={{ marginBottom: 8, position: 'relative' }}><Icon name={icon} size={24} color={color} /></div>
         <div style={{ fontSize: 13, fontWeight: 800, color: '#fff', position: 'relative' }}>{label}</div>
         <div style={{ fontSize: 10, color, fontWeight: 600, opacity: 0.75, marginTop: 2, position: 'relative' }}>{sub}</div>
       </button>
@@ -169,7 +170,7 @@ function CooldownBanner({ until }: { until: Date }) {
         display: 'flex', alignItems: 'center', gap: 10,
       }}
     >
-      <span style={{ fontSize: 16 }}>⏱️</span>
+      <Icon name="timer" size={18} color="#EF4444" />
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: '#EF4444' }}>Кулдаун активен</div>
         <div style={{ fontSize: 11, color: '#6B7280', marginTop: 1 }}>Поиск заблокирован ещё {remaining}</div>
@@ -409,7 +410,7 @@ export default function DashboardPage() {
                   display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#C084FC',
                 }}
               >
-                <span>🎯</span>
+                <Icon name="target" size={14} color="#C084FC" />
                 <span>Калибровка: {user.matchesPlayed}/10 матчей · Win <b>+80</b> / Loss <b>−40</b> ELO</span>
               </motion.div>
             )}
@@ -435,7 +436,7 @@ export default function DashboardPage() {
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 22 }}>🪙</span>
+              <Icon name="coins" size={22} color="#EAB308" />
               <div>
                 <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', lineHeight: 1, marginBottom: 2 }}>
                   Монеты
@@ -456,7 +457,8 @@ export default function DashboardPage() {
                 boxShadow: '0 2px 12px rgba(234,179,8,0.4)',
               }}
             >
-              🪙 Получить
+              <Icon name="coins" size={16} color="#000" />
+              Получить
             </motion.button>
           </motion.div>
 
@@ -500,7 +502,7 @@ export default function DashboardPage() {
                       transition={{ duration: 1, repeat: Infinity }}
                       style={{ width: 8, height: 8, borderRadius: '50%', background: '#E8092E', flexShrink: 0 }}
                     />
-                    <span style={{ fontWeight: 800, fontSize: 13, flex: 1 }}>⚔️ Поиск матча 5v5</span>
+                    <span style={{ fontWeight: 800, fontSize: 13, flex: 1, display: 'flex', alignItems: 'center', gap: 7 }}><Icon name="swords" size={16} color="#fff" />Поиск матча 5v5</span>
                     <span style={{ fontSize: 12, color: '#E8092E', fontWeight: 800 }}>{queueSize}/10</span>
                   </div>
                   <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
@@ -563,7 +565,7 @@ export default function DashboardPage() {
                     />
                   )}
                   <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 20 }}>⚔️</span>
+                    <Icon name="swords" size={22} color="#fff" />
                     <div>
                       <div style={{ fontSize: 15, fontWeight: 900, color: '#fff', letterSpacing: '0.02em' }}>
                         {queueLoading ? 'Подключаемся...' : 'Найти матч 5v5'}
@@ -608,7 +610,7 @@ export default function DashboardPage() {
                     }}
                   />
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                    <span style={{ fontWeight: 800, fontSize: 13 }}>⚡ Очередь 2v2</span>
+                    <span style={{ fontWeight: 800, fontSize: 13, display: 'flex', alignItems: 'center', gap: 7 }}><Icon name="bolt" size={16} color="#C084FC" />Очередь 2v2</span>
                     <span style={{ fontSize: 12, color: '#A855F7', fontWeight: 800 }}>{lobby.filled}/{lobby.slots}</span>
                   </div>
                   <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
@@ -665,7 +667,7 @@ export default function DashboardPage() {
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 18 }}>⚡</span>
+                    <Icon name="bolt" size={20} color="#C084FC" />
                     <div>
                       <div style={{ fontSize: 14, fontWeight: 800, color: '#C084FC' }}>
                         {lobbyLoading ? 'Подключаемся...' : 'Найти матч 2v2'}
@@ -691,10 +693,10 @@ export default function DashboardPage() {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               {[
-                { icon: '🏆', label: 'Рейтинг',  sub: 'Топ игроков',   href: '/leaderboard', color: '#F59E0B', glow: 'rgba(245,158,11,0.12)'  },
-                { icon: '🎯', label: 'Задания',   sub: 'Ежедневные',    href: '/missions',    color: '#22C55E', glow: 'rgba(34,197,94,0.12)'   },
-                { icon: '🛒', label: 'Магазин',   sub: 'Варны и скины', href: '/shop',        color: '#A855F7', glow: 'rgba(168,85,247,0.12)'  },
-                { icon: '💬', label: 'Поддержка', sub: 'Помощь · FAQ',  href: '/support',     color: '#60A5FA', glow: 'rgba(96,165,250,0.12)'  },
+                { icon: 'trophy', label: 'Рейтинг',  sub: 'Топ игроков',   href: '/leaderboard', color: '#F59E0B', glow: 'rgba(245,158,11,0.12)'  },
+                { icon: 'target', label: 'Задания',   sub: 'Ежедневные',    href: '/missions',    color: '#22C55E', glow: 'rgba(34,197,94,0.12)'   },
+                { icon: 'cart', label: 'Магазин',   sub: 'Варны и скины', href: '/shop',        color: '#A855F7', glow: 'rgba(168,85,247,0.12)'  },
+                { icon: 'chat', label: 'Поддержка', sub: 'Помощь · FAQ',  href: '/support',     color: '#60A5FA', glow: 'rgba(96,165,250,0.12)'  },
               ].map((item, i) => (
                 <TiltCard
                   key={item.href}
@@ -765,7 +767,7 @@ export default function DashboardPage() {
               <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.15)', margin: '0 auto 20px' }} />
               <div style={{ fontSize: 18, fontWeight: 900, color: '#fff', marginBottom: 4, textAlign: 'center' }}>Получить монеты</div>
               <div style={{ fontSize: 12, color: '#4B5563', textAlign: 'center', marginBottom: 20 }}>
-                Текущий баланс: <b style={{ color: '#EAB308' }}>🪙 {user.coins}</b>
+                Текущий баланс: <b style={{ color: '#EAB308', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="coins" size={13} color="#EAB308" />{user.coins}</b>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -784,7 +786,7 @@ export default function DashboardPage() {
                     width: 44, height: 44, borderRadius: 12, flexShrink: 0,
                     background: 'linear-gradient(135deg, #EAB308, #ca8a04)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20,
-                  }}>💳</div>
+                  }}><Icon name="card" size={22} color="#000" /></div>
                   <div>
                     <div style={{ fontSize: 14, fontWeight: 900, color: '#fff', marginBottom: 2 }}>Купить за рубли</div>
                     <div style={{ fontSize: 11, color: '#6B7280' }}>1 ₽ = 10 монет · от 10 ₽</div>
@@ -807,11 +809,11 @@ export default function DashboardPage() {
                     width: 44, height: 44, borderRadius: 12, flexShrink: 0,
                     background: 'linear-gradient(135deg, #22C55E, #16a34a)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20,
-                  }}>🎯</div>
+                  }}><Icon name="target" size={22} color="#fff" /></div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 14, fontWeight: 900, color: '#fff', marginBottom: 2 }}>Сыграть и заработать</div>
                     <div style={{ fontSize: 11, color: '#6B7280' }}>
-                      +10 🪙 за победу · {Math.max(0, 10 - (user.miniGamePlaysToday ?? 0))}/10 попыток осталось
+                      +10 <Icon name="coins" size={11} color="#22C55E" style={{ verticalAlign: '-1px' }} /> за победу · {Math.max(0, 10 - (user.miniGamePlaysToday ?? 0))}/10 попыток осталось
                     </div>
                   </div>
                   {(user.miniGamePlaysToday ?? 0) < 10 ? (

@@ -10,7 +10,7 @@ import { EloRing } from '@/components/ui/EloRing'
 import { EloChart } from '@/components/ui/EloChart'
 import { ReportModal } from '@/components/reports/ReportModal'
 import { getEloRank } from '@/lib/eloRank'
-import { countryFlag } from '@/lib/regions'
+import { Flag } from '@/components/ui/Flag'
 
 interface PublicProfile {
   id: number
@@ -232,7 +232,7 @@ export default function PlayerPage() {
               {/* Name row — badges wrap below if needed */}
               <div style={{ marginBottom: 4 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
-                  {profile.region && <span style={{ fontSize: 20, flexShrink: 0 }}>{countryFlag(profile.region)}</span>}
+                  {profile.region && <Flag code={profile.region} size={15} />}
                   <h2 style={{
                     fontSize: 20, fontWeight: 900, color: '#fff', margin: 0,
                     letterSpacing: '-0.5px', lineHeight: 1.2,

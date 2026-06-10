@@ -10,7 +10,7 @@ import { RequireRegistration } from '@/components/providers/RequireRegistration'
 import { Avatar } from '@/components/ui/Avatar'
 import { EloRing } from '@/components/ui/EloRing'
 import { getEloRank } from '@/lib/eloRank'
-import { countryFlag } from '@/lib/regions'
+import { Flag } from '@/components/ui/Flag'
 
 interface Entry {
   rank: number; id: number
@@ -114,7 +114,7 @@ function PodiumCard({ p, pos, delay }: { p: Entry; pos: 1 | 2 | 3; delay: number
         maxWidth: 84, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         marginBottom: 2, display: 'flex', alignItems: 'center', gap: 3, justifyContent: 'center',
       }}>
-        {p.region && <span style={{ flexShrink: 0 }}>{countryFlag(p.region)}</span>}
+        {p.region && <Flag code={p.region} size={10} />}
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.gameNickname || p.firstName}</span>
         {p.isPremium && <span style={{ flexShrink: 0, fontSize: 10 }}>⭐</span>}
       </div>
@@ -237,7 +237,7 @@ function PlayerRow({ p, delay, isMe }: { p: Entry; delay: number; isMe: boolean 
         <div style={{ flex: 1, minWidth: 0 }}>
           {/* Name */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 3 }}>
-            {p.region && <span style={{ fontSize: 12, flexShrink: 0 }}>{countryFlag(p.region)}</span>}
+            {p.region && <Flag code={p.region} size={11} />}
             <span style={{
               fontWeight: 800, fontSize: 13, color: isMe ? '#fff' : '#E5E7EB',
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -389,7 +389,7 @@ export default function LeaderboardPage() {
                 color: tab === 'regional' ? '#fff' : '#4B5563',
                 boxShadow: tab === 'regional' ? '0 2px 12px rgba(99,102,241,0.3)' : 'none',
               }}>
-                {user?.region ? `${countryFlag(user.region)} Региональный` : '📍 Региональный'}
+                {user?.region ? <><Flag code={user.region} size={11} style={{ marginRight: 5 }} />Региональный</> : '📍 Региональный'}
               </button>
             </div>
           </motion.div>

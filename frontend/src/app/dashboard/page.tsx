@@ -15,7 +15,7 @@ import { api } from '@/lib/api'
 import { connectSocket } from '@/lib/socket'
 import { getEloRank } from '@/lib/eloRank'
 import { Avatar } from '@/components/ui/Avatar'
-import { countryFlag } from '@/lib/regions'
+import { Flag } from '@/components/ui/Flag'
 import { playQueueJoin, playQueueLeave, playMatchFound } from '@/lib/sounds'
 import { useUiStore } from '@/store/uiStore'
 
@@ -306,7 +306,7 @@ export default function DashboardPage() {
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   display: 'flex', alignItems: 'center', gap: 4,
                 }}>
-                  {user.region && <span style={{ flexShrink: 0 }}>{countryFlag(user.region)}</span>}
+                  {user.region && <Flag code={user.region} size={12} />}
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.gameNickname || user.firstName}</span>
                 </div>
                 <div style={{ fontSize: 10, color: '#4B5563', fontWeight: 600 }}>

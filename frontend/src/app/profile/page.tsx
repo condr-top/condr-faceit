@@ -12,7 +12,7 @@ import { RequireRegistration } from '@/components/providers/RequireRegistration'
 import { Avatar } from '@/components/ui/Avatar'
 import { CoinPurchaseModal } from '@/components/coins/CoinPurchaseModal'
 import { getEloRank, getRankProgress, ELO_RANKS, CHALLENGER_RANK } from '@/lib/eloRank'
-import { countryFlag } from '@/lib/regions'
+import { Flag } from '@/components/ui/Flag'
 import { RegionPicker } from '@/components/ui/RegionPicker'
 
 // ── Animated counter ──────────────────────────────────────────────────────────
@@ -321,7 +321,7 @@ export default function ProfilePage() {
               {/* Name + rank info */}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
-                  {user.region && <span style={{ fontSize: 20, flexShrink: 0 }}>{countryFlag(user.region)}</span>}
+                  {user.region && <Flag code={user.region} size={15} />}
                   <h1 style={{
                     fontSize: 21, fontWeight: 900, color: '#fff', margin: 0,
                     letterSpacing: '-0.5px', lineHeight: 1.2, wordBreak: 'break-word',
@@ -528,7 +528,7 @@ export default function ProfilePage() {
               <div>
                 {user.region ? (
                   <>
-                    <div style={{ fontSize: 22, marginBottom: 2 }}>{countryFlag(user.region)}</div>
+                    <div style={{ marginBottom: 4 }}><Flag code={user.region} size={20} /></div>
                     <div style={{ fontSize: 12, color: '#9CA3AF' }}>
                       {user.regionUpdatedAt && (() => {
                         const days = Math.ceil(Math.max(0, 7 - (Date.now() - new Date(user.regionUpdatedAt).getTime()) / 86_400_000))

@@ -5,7 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/store/authStore'
 import { useUiStore } from '@/store/uiStore'
-import { REGIONS, countryFlag } from '@/lib/regions'
+import { REGIONS } from '@/lib/regions'
+import { Flag } from '@/components/ui/Flag'
 
 interface Props { onClose: () => void }
 
@@ -97,7 +98,7 @@ export function RegionPicker({ onClose }: Props) {
           {user?.region ? (
             <div style={{ fontSize: 12, color: '#4B5563' }}>
               Текущий: <b style={{ color: '#fff' }}>
-                {countryFlag(user.region)} {REGIONS.find(r => r.code === user.region)?.name ?? user.region}
+                <Flag code={user.region} size={12} style={{ marginRight: 4 }} />{REGIONS.find(r => r.code === user.region)?.name ?? user.region}
               </b>
               {!canChange && (
                 <span style={{ color: '#F59E0B', marginLeft: 8 }}>
@@ -147,9 +148,7 @@ export function RegionPicker({ onClose }: Props) {
                     transition: 'background 0.15s',
                   }}
                 >
-                  <span style={{ fontSize: 22, lineHeight: 1, flexShrink: 0 }}>
-                    {countryFlag(r.code)}
-                  </span>
+                  <Flag code={r.code} size={17} />
                   <span style={{
                     fontSize: 13, fontWeight: isActive ? 800 : 600,
                     color: isActive ? '#E8092E' : '#fff',

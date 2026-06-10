@@ -320,24 +320,26 @@ export default function ProfilePage() {
 
               {/* Name + rank info */}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', marginBottom: 4, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 3, minWidth: 0 }}>
                   {user.region && <Flag code={user.region} size={14} />}
                   <h1 style={{
-                    fontSize: 19, fontWeight: 900, color: '#fff', margin: 0,
-                    letterSpacing: '-0.5px', lineHeight: 1.2, minWidth: 0,
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    fontSize: 20, fontWeight: 900, color: '#fff', margin: 0,
+                    letterSpacing: '-0.5px', lineHeight: 1.15, minWidth: 0,
+                    overflowWrap: 'anywhere', wordBreak: 'break-word',
                     textShadow: `0 2px 20px ${theme.color}44`,
                   }}>
                     {user.gameNickname || user.firstName}
                   </h1>
-                  {user.isPremium && <span style={{ fontSize: 16, flexShrink: 0 }}>⭐</span>}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+                  {user.username && (
+                    <span style={{ fontSize: 11, color: '#4B5563' }}>@{user.username}</span>
+                  )}
+                  {user.isPremium && <span style={{ fontSize: 14, lineHeight: 1, flexShrink: 0 }}>⭐</span>}
                   {user.isAdmin && (
                     <span style={{ fontSize: 9, background: 'rgba(232,9,46,0.2)', color: '#E8092E', padding: '2px 6px', borderRadius: 6, fontWeight: 800, flexShrink: 0 }}>ADM</span>
                   )}
                 </div>
-                {user.username && (
-                  <div style={{ fontSize: 11, color: '#4B5563', marginBottom: 6 }}>@{user.username}</div>
-                )}
 
                 {/* Rank + position */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', minWidth: 0 }}>

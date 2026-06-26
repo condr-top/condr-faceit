@@ -12,14 +12,17 @@ import { Report } from '../reports/entities/report.entity';
 import { CoinPurchase } from '../coins/entities/coin-purchase.entity';
 import { Notification } from '../notifications/entities/notification.entity';
 import { EloHistory } from '../users/entities/elo-history.entity';
+import { AppMeta } from './entities/app-meta.entity';
 import { GatewayModule } from '../gateway/gateway.module';
 import { MissionsModule } from '../missions/missions.module';
+import { DiscordModule } from '../discord/discord.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Match, MatchPlayer, Mission, ShopItem, Tournament, Report, CoinPurchase, Notification, EloHistory]),
+    TypeOrmModule.forFeature([User, Match, MatchPlayer, Mission, ShopItem, Tournament, Report, CoinPurchase, Notification, EloHistory, AppMeta]),
     GatewayModule,
     MissionsModule,
+    DiscordModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],

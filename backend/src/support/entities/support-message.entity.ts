@@ -8,6 +8,9 @@ export class SupportMessage {
   @Column({ name: 'user_id' })
   userId: number;
 
+  @Column({ name: 'ticket_id', type: 'int', nullable: true })
+  ticketId: number | null;
+
   @Column('text')
   text: string;
 

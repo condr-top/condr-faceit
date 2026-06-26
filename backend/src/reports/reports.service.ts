@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Report, ReportStatus } from './entities/report.entity';
 import { User } from '../users/entities/user.entity';
 import axios from 'axios';
+import { tgPost } from '../common/telegram';
 
 const REASONS: Record<string, string> = {
   cheat: '🎮 Читерство',
@@ -30,7 +31,8 @@ export class ReportsService {
       this.reportRepo.create({ reporterId, reportedId, reason, description }),
     );
 
-    await this.sendTelegramNotification(report, reporter, reported);
+    // в фоне — не блокируем отправку репорта
+    this.sendTelegramNotification(report, reporter, reported).catch(() => {});
     return report;
   }
 
@@ -53,7 +55,7 @@ export class ReportsService {
 
     const topicId = process.env.TOPIC_REPORTS ? parseInt(process.env.TOPIC_REPORTS) : undefined;
     try {
-      await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      await tgPost('sendMessage', {
         chat_id: chatId,
         text,
         parse_mode: 'HTML',
@@ -65,7 +67,9 @@ export class ReportsService {
           ]],
         },
       });
-    } catch {}
+    } catch (e: any) {
+      console.warn(`[reports] TG send failed: ${e?.response?.data?.description || e?.message}`);
+    }
   }
 
   async handleWebhookCallback(data: string) {

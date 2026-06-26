@@ -19,17 +19,59 @@ import { existsSync, mkdirSync } from 'fs';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminGuard } from '../auth/admin.guard';
 import { MatchesService } from './matches.service';
+import { ClanQueueService } from './clan-queue.service';
 
 @Controller('matches')
 @UseGuards(JwtAuthGuard)
 export class MatchesController {
-  constructor(private matchesService: MatchesService) {}
+  constructor(
+    private matchesService: MatchesService,
+    private clanQueue: ClanQueueService,
+  ) {}
 
   // ── Active match redirect ────────────────────────────────────────────────
 
   @Get('my-active')
   getMyActive(@Request() req: any) {
     return this.matchesService.getMyActiveMatch(req.user.id);
+  }
+
+  // ── Клановый подбор 5x5 ──────────────────────────────────────────────────
+
+  @Post('clan-queue/join')
+  clanQueueJoin(@Request() req: any, @Body('memberIds') memberIds: number[]) {
+    return this.clanQueue.join(req.user.id, memberIds || []);
+  }
+
+  @Post('clan-queue/leave')
+  clanQueueLeave(@Request() req: any) {
+    return this.clanQueue.leave(req.user.id);
+  }
+
+  @Get('clan-queue/status')
+  clanQueueStatus(@Request() req: any) {
+    return this.clanQueue.status(req.user.id);
+  }
+
+  // ── Праки (ready-check + выход) ──
+  @Get('prac/:scrimId/status')
+  pracStatus(@Request() req: any, @Param('scrimId', ParseIntPipe) scrimId: number) {
+    return this.clanQueue.pracStatus(req.user.id, scrimId);
+  }
+
+  @Post('prac/:scrimId/ready')
+  pracReady(@Request() req: any, @Param('scrimId', ParseIntPipe) scrimId: number) {
+    return this.clanQueue.pracReady(req.user.id, scrimId);
+  }
+
+  @Post('prac/:scrimId/unready')
+  pracUnready(@Request() req: any, @Param('scrimId', ParseIntPipe) scrimId: number) {
+    return this.clanQueue.pracCancel(req.user.id, scrimId);
+  }
+
+  @Post(':id/leave-prac')
+  leavePrac(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
+    return this.matchesService.leavePrac(id, req.user.id);
   }
 
   // ── 2v2 Public Lobby ────────────────────────────────────────────────────
@@ -50,13 +92,14 @@ export class MatchesController {
   }
 
   @Post('lobby/join')
-  joinLobby(@Request() req: any) {
+  joinLobby(@Request() req: any, @Body('league') league?: string) {
     const user = req.user;
     if (user.cooldownUntil && new Date(user.cooldownUntil) > new Date()) {
       const remainMin = Math.ceil((new Date(user.cooldownUntil).getTime() - Date.now()) / 60_000);
       throw new BadRequestException(`Кулдаун активен. Осталось ~${remainMin} мин.`);
     }
-    return this.matchesService.joinOrCreateLobby2v2(user.id);
+    const lg = league === 'cpl' || league === 'cplq' ? league : null;
+    return this.matchesService.joinOrCreateLobby2v2(user.id, lg);
   }
 
   @Post('lobby/leave')
@@ -70,9 +113,22 @@ export class MatchesController {
     @Query('page') page = 1,
     @Query('limit') limit = 10,
     @Query('userId') userId?: string,
+    @Query('league') league?: string,
   ) {
     const targetId = userId ? +userId : req.user.id;
-    return this.matchesService.getMatchHistory(targetId, +page, +limit);
+    const lg = league === 'cpl' || league === 'cplq' ? league : null;
+    return this.matchesService.getMatchHistory(targetId, +page, +limit, lg);
+  }
+
+  @Get('map-stats')
+  getMapStats(@Request() req: any, @Query('league') league?: string) {
+    const lg = league === 'cpl' || league === 'cplq' ? league : null;
+    return this.matchesService.getMapStats(req.user.id, lg);
+  }
+
+  @Get(':id/summary')
+  getMatchSummary(@Param('id', ParseIntPipe) id: number) {
+    return this.matchesService.getMatchSummary(id);
   }
 
   @Get(':id')
@@ -93,6 +149,16 @@ export class MatchesController {
   @Post(':id/expire-result')
   expireResult(@Param('id', ParseIntPipe) id: number) {
     return this.matchesService.expireResult(id);
+  }
+
+  @Post(':id/expire-veto')
+  expireVeto(@Param('id', ParseIntPipe) id: number) {
+    return this.matchesService.expireVetoTurn(id);
+  }
+
+  @Post(':id/expire-lobby-link')
+  expireLobbyLink(@Param('id', ParseIntPipe) id: number) {
+    return this.matchesService.expireLobbyLink(id);
   }
 
   @Post(':id/veto')

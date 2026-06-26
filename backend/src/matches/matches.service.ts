@@ -1,16 +1,23 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import axios from 'axios';
+import { createReadStream, existsSync } from 'fs';
+import { join } from 'path';
+import FormData from 'form-data';
+import { tgPost } from '../common/telegram';
 import { Match, MatchStatus, MAPS } from './entities/match.entity';
 import { MatchPlayer } from './entities/match-player.entity';
 import { User } from '../users/entities/user.entity';
 import { Notification } from '../notifications/entities/notification.entity';
 import { AppGateway } from '../gateway/app.gateway';
 import { DiscordService, MatchTeams } from '../discord/discord.service';
+import { ClansService } from '../clans/clans.service';
 
 @Injectable()
 export class MatchesService {
+  private readonly logger = new Logger(MatchesService.name);
+
   constructor(
     @InjectRepository(Match) private matchRepo: Repository<Match>,
     @InjectRepository(MatchPlayer) private playerRepo: Repository<MatchPlayer>,
@@ -18,17 +25,117 @@ export class MatchesService {
     @InjectRepository(Notification) private notifRepo: Repository<Notification>,
     private gateway: AppGateway,
     private discordService: DiscordService,
+    private clansService: ClansService,
   ) {}
+
+  // ── Клановый бой 5x5 ──────────────────────────────────────────────────────
+  // Создаёт обычный Match с фиксированными ростерами (без перетасовки),
+  // капитанами-инициаторами и клановыми флагами. Дальше — стандартный
+  // ready-check → вето → лобби → результат.
+  async createClanBattle(
+    a: { clanId: number; roster: number[]; captainId: number },
+    b: { clanId: number; roster: number[]; captainId: number },
+  ): Promise<Match> {
+    const users = await this.userRepo.findBy({ id: In([...a.roster, ...b.roster]) });
+    const eloMap = Object.fromEntries(users.map((u) => [u.id, u.elo]));
+    const avg = (ids: number[]) => ids.length ? Math.round(ids.reduce((s, id) => s + (eloMap[id] ?? 1000), 0) / ids.length) : 1000;
+    const match = this.matchRepo.create({
+      status: MatchStatus.READY_CHECK,
+      teamAIds: a.roster,
+      teamBIds: b.roster,
+      teamAElo: avg(a.roster),
+      teamBElo: avg(b.roster),
+      hostId: a.captainId,
+      captainAId: a.captainId,
+      captainBId: b.captainId,
+      availableMaps: [...MAPS],
+      readyPlayers: [],
+      readyCheckExpires: new Date(Date.now() + 30000),
+      isClanMatch: true,
+      clanMode: 'battle',
+      clanAId: a.clanId,
+      clanBId: b.clanId,
+    });
+    return this.matchRepo.save(match);
+  }
+
+  // Прак: создаётся сразу IN_PROGRESS (готовность уже подтверждена), без вето,
+  // карта из заявки, случайный хост. Результаты не сохраняются.
+  async createPracMatch(
+    clanAId: number, clanBId: number, rosterA: number[], rosterB: number[], map: string | null,
+  ): Promise<Match> {
+    const all = [...rosterA, ...rosterB];
+    const users = await this.userRepo.findBy({ id: In(all) });
+    const eloMap = Object.fromEntries(users.map((u) => [u.id, u.elo]));
+    const avg = (ids: number[]) => ids.length ? Math.round(ids.reduce((s, id) => s + (eloMap[id] ?? 1000), 0) / ids.length) : 1000;
+    const host = all[Math.floor(Math.random() * all.length)];
+    const match = this.matchRepo.create({
+      status: MatchStatus.IN_PROGRESS,
+      teamAIds: rosterA,
+      teamBIds: rosterB,
+      teamAElo: avg(rosterA),
+      teamBElo: avg(rosterB),
+      hostId: host,
+      captainAId: rosterA[0],
+      captainBId: rosterB[0],
+      map: map || MAPS[Math.floor(Math.random() * MAPS.length)],
+      availableMaps: [],
+      readyPlayers: all,
+      teamASide: Math.random() < 0.5 ? 'T' : 'CT',
+      startedAt: new Date(),
+      isClanMatch: true,
+      clanMode: 'prac',
+      clanAId, clanBId,
+    });
+    const saved = await this.matchRepo.save(match);
+    await this.createMatchPlayers(saved);
+    return saved;
+  }
+
+  // Выход из прака (через 5 минут после старта). Результаты не сохраняются — матч просто закрывается.
+  async leavePrac(matchId: number, userId: number): Promise<{ ok: boolean }> {
+    const match = await this.getMatch(matchId);
+    if (!match.isClanMatch || match.clanMode !== 'prac') throw new BadRequestException('Это не прак');
+    if (![...match.teamAIds, ...match.teamBIds].includes(userId)) throw new BadRequestException('Вы не участник прака');
+    const SUBMIT_DELAY_MS = 5 * 60 * 1000;
+    if (!match.startedAt || Date.now() - new Date(match.startedAt).getTime() < SUBMIT_DELAY_MS) {
+      throw new BadRequestException('Выйти можно через 5 минут после начала');
+    }
+    if (match.status === MatchStatus.IN_PROGRESS) {
+      match.status = MatchStatus.CANCELLED;
+      match.endedAt = new Date();
+      const saved = await this.matchRepo.save(match);
+      this.gateway.emitToMatch(matchId, 'match_updated', saved);
+    }
+    return { ok: true };
+  }
+
+  // Применяет рейтинг клана и пишет историю по завершённому клановому бою.
+  // Идемпотентно по eloChange-флагу (повторный вызов ничего не делает).
+  private async finalizeClanBattle(match: Match): Promise<void> {
+    if (!match.isClanMatch || match.clanMode !== 'battle') return;
+    if (match.clanAId == null || match.clanBId == null) return;
+    if (match.eloChange === 1) return; // уже обработан
+    const scoreA = match.scoreA ?? 0;
+    const scoreB = match.scoreB ?? 0;
+    try {
+      await this.clansService.recordClanMatchResult({
+        clanAId: match.clanAId, clanBId: match.clanBId, scoreA, scoreB, map: match.map ?? null,
+      });
+    } catch {}
+    match.eloChange = 1; // маркер «рейтинг применён» (личный ELO в клановых боях не используется)
+    await this.matchRepo.save(match);
+  }
 
   // ── 2v2 Lobby helpers ─────────────────────────────────────────────────────
 
   /** Find the READY_CHECK 2v2 lobby this user is currently in (if any). */
   private async findUser2v2Lobby(userId: number): Promise<Match | null> {
-    const openMatches = await this.matchRepo.find({ where: { status: MatchStatus.READY_CHECK } });
+    const openMatches = await this.matchRepo.find({ where: { status: MatchStatus.READY_CHECK, isLobby: true } });
     return (
       openMatches.find(
         (m) =>
-          m.teamAIds.length + m.teamBIds.length === 4 &&
+          m.teamAIds.length + m.teamBIds.length === 10 &&
           [...m.teamAIds, ...m.teamBIds].includes(userId),
       ) ?? null
     );
@@ -75,9 +182,12 @@ export class MatchesService {
    * Join an existing open 2v2 lobby, or create a new one if none is available.
    * If the user is already in a lobby, returns that lobby.
    */
-  async joinOrCreateLobby2v2(userId: number): Promise<Match> {
+  async joinOrCreateLobby2v2(userId: number, league: string | null = null): Promise<Match> {
     const userCheck = await this.userRepo.findOne({ where: { id: userId } });
     if (userCheck?.isBanned) throw new BadRequestException('Ваш аккаунт заблокирован');
+    // Гейт доступа к лигам — выдаётся вручную админом.
+    if (league === 'cpl' && !userCheck?.cplAccess) throw new BadRequestException('Нет доступа к CPL');
+    if (league === 'cplq' && !userCheck?.cplqAccess) throw new BadRequestException('Нет доступа к CPL-Q');
 
     // Already in a lobby → return it
     const existing = await this.findUser2v2Lobby(userId);
@@ -86,11 +196,13 @@ export class MatchesService {
       return existing;
     }
 
-    // Look for any open lobby with free slots that we can join
-    const openMatches = await this.matchRepo.find({ where: { status: MatchStatus.READY_CHECK } });
+    // Look for any open lobby (того же режима/лиги) with free slots that we can join
+    const openMatches = await this.matchRepo.find({ where: { status: MatchStatus.READY_CHECK, isLobby: true } });
     const joinable = openMatches.find(
       (m) =>
-        m.teamAIds.length + m.teamBIds.length === 4 &&
+        (m.league ?? null) === (league ?? null) &&
+        (!m.partyGroups || m.partyGroups.length === 0) &&
+        m.teamAIds.length + m.teamBIds.length === 10 &&
         ![...m.teamAIds, ...m.teamBIds].includes(userId) &&
         this.lobbyPlaceholders(m) > 0,
     );
@@ -100,18 +212,22 @@ export class MatchesService {
     }
 
     // No open lobby → create a fresh one
-    return this.createLobby2v2(userId);
+    return this.createLobby2v2(userId, league);
   }
 
   /** Create a brand-new 2v2 lobby for userId. */
-  async createLobby2v2(userId: number): Promise<Match> {
+  async createLobby2v2(userId: number, league: string | null = null): Promise<Match> {
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
 
     const match = this.matchRepo.create({
       status: MatchStatus.READY_CHECK,
-      teamAIds: [userId, userId], // creator fills all slots as placeholders initially
-      teamBIds: [userId, userId],
+      isLobby: true,
+      league: league ?? null,
+      // Полноценный матчмейкинг 5v5: создатель занимает все 10 слотов как плейсхолдеры,
+      // реальные игроки заменяют их при входе.
+      teamAIds: [userId, userId, userId, userId, userId],
+      teamBIds: [userId, userId, userId, userId, userId],
       teamAElo: user.elo,
       teamBElo: user.elo,
       hostId: userId,
@@ -191,6 +307,47 @@ export class MatchesService {
     return this.joinOrCreateLobby2v2(userId);
   }
 
+  /**
+   * Завести отряд (2–5 игроков) в поиск одним блоком. Все попадают в одно лобби,
+   * а балансер при старте гарантированно оставляет их в одной команде.
+   * Правило: в одном лобби максимум один отряд (упрощает корректное деление 5×5).
+   */
+  async joinLobbyAsParty(memberIds: number[]): Promise<Match> {
+    const ids = [...new Set(memberIds)].filter(Boolean);
+    if (ids.length < 2) return this.joinOrCreateLobby2v2(ids[0]);
+    if (ids.length > 5) throw new BadRequestException('Максимум 5 игроков в отряде');
+
+    const users = await this.userRepo.findBy({ id: In(ids) });
+    if (users.some((u) => u.isBanned)) throw new BadRequestException('Один из участников заблокирован');
+    for (const uid of ids) {
+      if (await this.findUser2v2Lobby(uid)) throw new BadRequestException('Кто-то из отряда уже в поиске');
+    }
+
+    // Лобби без отряда, с достаточным числом свободных слотов, где никого из нас ещё нет
+    const openMatches = await this.matchRepo.find({ where: { status: MatchStatus.READY_CHECK, isLobby: true } });
+    let lobby =
+      openMatches.find(
+        (m) =>
+          (!m.partyGroups || m.partyGroups.length === 0) &&
+          m.teamAIds.length + m.teamBIds.length === 10 &&
+          this.lobbyPlaceholders(m) >= ids.length &&
+          !ids.some((id) => [...m.teamAIds, ...m.teamBIds].includes(id)),
+      ) ?? null;
+
+    const [leaderId, ...rest] = ids;
+    if (!lobby) {
+      lobby = await this.createLobby2v2(leaderId); // лидер занимает teamA[0], остальные слоты — плейсхолдеры
+      for (const uid of rest) lobby = await this.fillLobbySlot(lobby, uid);
+    } else {
+      for (const uid of ids) lobby = await this.fillLobbySlot(lobby, uid);
+    }
+
+    lobby.partyGroups = [ids];
+    const saved = await this.matchRepo.save(lobby);
+    this.gateway.emitMatchFound(ids, saved.id);
+    return saved;
+  }
+
   async createMatch(playerIds: number[]): Promise<Match> {
     if (playerIds.length !== 10) {
       throw new BadRequestException('Exactly 10 players required');
@@ -239,6 +396,31 @@ export class MatchesService {
     return { teamA: bestA, teamB: bestB };
   }
 
+  /**
+   * Делит 10 игроков на 5×5 так, чтобы отряд (party) целиком был в одной команде,
+   * добивая его команду соло-игроками для наилучшего баланса по среднему ELO.
+   */
+  private balancePartyTeams(playerIds: number[], eloMap: Record<number, number>, party: number[]): { teamA: number[]; teamB: number[] } {
+    const solos = playerIds.filter((id) => !party.includes(id));
+    const need = 5 - party.length; // сколько соло добрать в команду отряда
+    const partyElo = party.reduce((s, id) => s + (eloMap[id] ?? 1000), 0);
+    if (need <= 0) return { teamA: [...party], teamB: solos };
+
+    let best: { teamA: number[]; teamB: number[] } | null = null;
+    let bestDiff = Infinity;
+    const idxs = solos.map((_, i) => i);
+    for (const combo of this.getCombinations(idxs, need)) {
+      const inA = new Set(combo);
+      const aSolos = combo.map((i) => solos[i]);
+      const bSolos = solos.filter((_, i) => !inA.has(i));
+      const eloA = partyElo + aSolos.reduce((s, id) => s + (eloMap[id] ?? 1000), 0);
+      const eloB = bSolos.reduce((s, id) => s + (eloMap[id] ?? 1000), 0);
+      const diff = Math.abs(eloA - eloB);
+      if (diff < bestDiff) { bestDiff = diff; best = { teamA: [...party, ...aSolos], teamB: bSolos }; }
+    }
+    return best ?? { teamA: [...party, ...solos.slice(0, need)], teamB: solos.slice(need) };
+  }
+
   private getCombinations(arr: number[], k: number): number[][] {
     const result: number[][] = [];
     const combo: number[] = [];
@@ -276,20 +458,36 @@ export class MatchesService {
       match.readyPlayers = [...match.readyPlayers, userId];
     }
 
+    if (match.readyPlayers.length >= uniquePlayers.size && match.isClanMatch) {
+      // Клановый бой: команды и капитаны фиксированы (ростеры кланов) — не перетасовываем.
+      match.status = MatchStatus.MAP_VETO;
+      match.vetoTurn = 'A';
+      match.vetoPhase = 0;
+      match.availableMaps = [...MAPS];
+      match.vetoTurnExpires = new Date(Date.now() + 15000);
+      const savedClan = await this.matchRepo.save(match);
+      this.gateway.emitToMatch(matchId, 'match_updated', savedClan);
+      return savedClan;
+    }
+
     if (match.readyPlayers.length >= uniquePlayers.size) {
-      // ── ELO-balanced team distribution ──
+      // ── ELO-balanced 5v5 team distribution ──
       const playerIds = [...uniquePlayers];
       const users = await this.userRepo.findBy({ id: In(playerIds) });
       const eloMap = Object.fromEntries(users.map((u) => [u.id, u.elo]));
 
-      // Sort by ELO descending: [best, 2nd, 3rd, worst]
-      const sorted = [...playerIds].sort((a, b) => (eloMap[b] ?? 0) - (eloMap[a] ?? 0));
-
-      // Snake draft: pair (1st+4th) vs (2nd+3rd) — most balanced split
-      // Randomly decide which balanced pair goes to team A / team B
-      const pairOne = [sorted[0], sorted[sorted.length - 1]];
-      const pairTwo = sorted.slice(1, sorted.length - 1);
-      const [teamA, teamB] = Math.random() < 0.5 ? [pairOne, pairTwo] : [pairTwo, pairOne];
+      // Если в лобби есть отряд — держим его в одной команде; иначе обычный баланс 5×5.
+      const party = match.partyGroups && match.partyGroups[0]
+        ? match.partyGroups[0].filter((id) => playerIds.includes(id))
+        : [];
+      let teamA: number[]; let teamB: number[];
+      if (party.length >= 2 && party.length <= 5) {
+        ({ teamA, teamB } = this.balancePartyTeams(playerIds, eloMap, party));
+      } else {
+        const { teamA: balA, teamB: balB } = this.balanceTeams(users);
+        teamA = balA.map((u) => u.id);
+        teamB = balB.map((u) => u.id);
+      }
 
       match.teamAIds = teamA;
       match.teamBIds = teamB;
@@ -310,6 +508,7 @@ export class MatchesService {
       match.vetoTurn = 'A';
       match.vetoPhase = 0;
       match.availableMaps = [...MAPS];
+      match.vetoTurnExpires = new Date(Date.now() + 15000);
     }
 
     const saved = await this.matchRepo.save(match);
@@ -335,7 +534,7 @@ export class MatchesService {
     // If NOT full — player was just waiting in queue, no penalty.
     // Only penalize those who ignored the ready check when the lobby WAS full.
     const uniquePlayers = [...new Set([...match.teamAIds, ...match.teamBIds])];
-    const isLobbyFull = uniquePlayers.length === 4;
+    const isLobbyFull = uniquePlayers.length === 10;
 
     if (isLobbyFull) {
       const dodgers = uniquePlayers.filter((id) => !match.readyPlayers.includes(id));
@@ -358,17 +557,11 @@ export class MatchesService {
   }
 
   /** -10 ELO + 1.5 min cooldown for missing ready check. */
+  /** Наказание за пропуск ready check — только кулдаун (без снятия ELO). */
   private async applyDodgePenalty(userId: number): Promise<void> {
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) return;
-    const before = user.elo;
-    user.elo = Math.max(100, user.elo - 10);
-    await this.matchRepo.query(
-      `INSERT INTO elo_history(user_id,elo_before,elo_after,elo_change,reason) VALUES($1,$2,$3,$4,'dodge_penalty')`,
-      [userId, before, user.elo, user.elo - before],
-    );
-    const until = new Date(Date.now() + 90_000); // 90 seconds = 1.5 min
-    user.cooldownUntil = until;
+    user.cooldownUntil = new Date(Date.now() + 90_000); // 90 секунд кулдаун
     await this.userRepo.save(user);
 
     await this.notifRepo.save(
@@ -376,71 +569,135 @@ export class MatchesService {
         userId,
         type: 'penalty',
         title: '⏱️ Штраф: пропуск ready check',
-        body: 'Вы не приняли ready check. -10 ELO, кулдаун 1.5 минуты.',
-        meta: { type: 'dodge', eloPenalty: -10 },
+        body: 'Вы не приняли ready check. Кулдаун 1.5 минуты.',
+        meta: { type: 'dodge' },
       }),
     );
   }
 
+  // Сериализация вето-операций по матчу: исключает гонку (двойной бан → два набора
+  // голосовых комнат). Каждая операция перечитывает матч уже внутри очереди.
+  private vetoChain = new Map<number, Promise<any>>();
+  private runVetoExclusive<T>(matchId: number, task: () => Promise<T>): Promise<T> {
+    const prev = this.vetoChain.get(matchId) ?? Promise.resolve();
+    const run = prev.catch(() => {}).then(() => task());
+    this.vetoChain.set(matchId, run.catch(() => {}));
+    return run;
+  }
+
   async vetoMap(matchId: number, userId: number, mapName: string): Promise<Match> {
-    const match = await this.getMatch(matchId);
-    if (match.status !== MatchStatus.MAP_VETO) {
-      throw new BadRequestException('Not in veto phase');
-    }
+    return this.runVetoExclusive(matchId, async () => {
+      const match = await this.getMatch(matchId);
+      if (match.status !== MatchStatus.MAP_VETO) {
+        throw new BadRequestException('Not in veto phase');
+      }
 
-    // Only the captain of the current team may veto
-    const captainId = match.vetoTurn === 'A' ? match.captainAId : match.captainBId;
-    const allTeamIds = [...match.teamAIds, ...match.teamBIds];
-    const isTestMatch = new Set(allTeamIds).size === 1; // admin test mode
-    if (!isTestMatch && userId !== captainId) {
-      throw new BadRequestException('Только капитан команды может делать вето');
-    }
+      // Only the captain of the current team may veto
+      const captainId = match.vetoTurn === 'A' ? match.captainAId : match.captainBId;
+      const allTeamIds = [...match.teamAIds, ...match.teamBIds];
+      const isTestMatch = new Set(allTeamIds).size === 1; // admin test mode
+      if (!isTestMatch && userId !== captainId) {
+        throw new BadRequestException('Только капитан команды может делать вето');
+      }
 
-    if (!match.availableMaps.includes(mapName)) {
-      throw new BadRequestException('Map not available');
-    }
+      if (!match.availableMaps.includes(mapName)) {
+        throw new BadRequestException('Map not available');
+      }
 
+      return this.applyVetoBan(match, mapName);
+    });
+  }
+
+  // Авто-бан по истечении 15 секунд хода капитана. Вызывается клиентами по таймеру.
+  async expireVetoTurn(matchId: number): Promise<Match> {
+    return this.runVetoExclusive(matchId, async () => {
+      const match = await this.getMatch(matchId);
+      if (match.status !== MatchStatus.MAP_VETO) return match;
+      if (!match.vetoTurnExpires || new Date() < new Date(match.vetoTurnExpires)) return match;
+      if (match.availableMaps.length <= 1) return match;
+      // случайная карта из оставшихся
+      const map = match.availableMaps[Math.floor(Math.random() * match.availableMaps.length)];
+      return this.applyVetoBan(match, map);
+    });
+  }
+
+  // Общая логика бана карты: убирает карту, либо завершает вето, либо передаёт ход (15с).
+  // Вызывается только внутри runVetoExclusive — операции по матчу сериализованы.
+  private async applyVetoBan(match: Match, mapName: string): Promise<Match> {
+    // защита от повторного завершения: матч уже не в вето или комнаты уже созданы
+    if (match.status !== MatchStatus.MAP_VETO) return match;
+    if (!match.availableMaps.includes(mapName)) return match;
     match.availableMaps = match.availableMaps.filter((m) => m !== mapName);
     match.vetoPhase += 1;
 
+    let finalize = false;
     if (match.availableMaps.length === 1) {
       match.map = match.availableMaps[0];
       match.status = MatchStatus.IN_PROGRESS;
       match.startedAt = new Date();
+      match.vetoTurnExpires = null as any;
       // ── Random side assignment ──
       match.teamASide = Math.random() < 0.5 ? 'T' : 'CT';
       await this.createMatchPlayers(match);
-
-      // ── Create Discord voice rooms ──
-      // Fetch Discord usernames for role assignment
-      const allIds    = [...match.teamAIds, ...match.teamBIds];
-      const allUsers  = await this.userRepo.findBy({ id: In(allIds) });
-      const userMap   = new Map(allUsers.map(u => [u.id, u.discordUsername ?? '']));
-
-      const teamASide = match.teamASide;
-      const teamADiscord = match.teamAIds.map(id => userMap.get(id) ?? '').filter(Boolean);
-      const teamBDiscord = match.teamBIds.map(id => userMap.get(id) ?? '').filter(Boolean);
-
-      const teams = {
-        matchId: match.id,
-        teamT:  teamASide === 'T' ? teamADiscord : teamBDiscord,
-        teamCT: teamASide === 'CT' ? teamADiscord : teamBDiscord,
-      };
-
-      const rooms = await this.discordService.createMatchVoiceRooms(match.id, 2, teams);
-      if (rooms) {
-        match.voiceChannelTId  = rooms.channelTId;
-        match.voiceChannelCTId = rooms.channelCTId;
-        match.voiceInviteT     = rooms.inviteT;
-        match.voiceInviteCT    = rooms.inviteCT;
-      }
+      finalize = true;
     } else {
       match.vetoTurn = match.vetoTurn === 'A' ? 'B' : 'A';
+      match.vetoTurnExpires = new Date(Date.now() + 15000);
     }
 
+    // Сохраняем и моментально отдаём результат — НЕ ждём Discord (иначе подвисание).
     const saved = await this.matchRepo.save(match);
-    this.gateway.emitToMatch(matchId, 'match_updated', saved);
+    this.gateway.emitToMatch(match.id, 'match_updated', saved);
+
+    // Голосовые комнаты создаём в фоне; когда готовы — отдельный апдейт матча.
+    if (finalize && !match.isClanMatch && !match.voiceChannelTId) {
+      this.createVoiceRoomsInBackground(saved.id).catch(() => {});
+    }
     return saved;
+  }
+
+  // Защита от одновременного создания комнат для одного матча (несколько поллингов).
+  private voiceCreating = new Set<number>();
+
+  // Фоновое создание Discord-комнат (не блокирует завершение вето).
+  // Идемпотентно и с дозагрузкой: если бот был не готов при старте матча —
+  // комнаты создадутся при первом поллинге, когда бот поднимется.
+  private async createVoiceRoomsInBackground(matchId: number): Promise<void> {
+    if (this.voiceCreating.has(matchId)) return;
+    const match = await this.getMatch(matchId);
+    if (match.status !== MatchStatus.IN_PROGRESS || match.isClanMatch || match.voiceChannelTId) return;
+    if (!this.discordService.isReady()) return; // бот ещё не готов — попробуем при следующем поллинге
+
+    this.voiceCreating.add(matchId);
+    try {
+      const allIds   = [...match.teamAIds, ...match.teamBIds];
+      const allUsers = await this.userRepo.findBy({ id: In(allIds) });
+      const userMap  = new Map(allUsers.map(u => [u.id, u.discordUsername ?? '']));
+      const teamADiscord = match.teamAIds.map(id => userMap.get(id) ?? '').filter(Boolean);
+      const teamBDiscord = match.teamBIds.map(id => userMap.get(id) ?? '').filter(Boolean);
+      const teams = {
+        matchId: match.id,
+        teamT:  match.teamASide === 'T' ? teamADiscord : teamBDiscord,
+        teamCT: match.teamASide === 'CT' ? teamADiscord : teamBDiscord,
+      };
+      const rooms = await this.discordService.createMatchVoiceRooms(match.id, 5, teams);
+      if (!rooms) return;
+      // перечитываем на случай гонки и проставляем поля
+      const fresh = await this.getMatch(matchId);
+      if (fresh.status !== MatchStatus.IN_PROGRESS || fresh.voiceChannelTId) {
+        // комнаты уже не нужны — чистим за собой
+        this.discordService.deleteMatchVoiceRooms(rooms.channelTId, rooms.channelCTId).catch(() => {});
+        return;
+      }
+      fresh.voiceChannelTId  = rooms.channelTId;
+      fresh.voiceChannelCTId = rooms.channelCTId;
+      fresh.voiceInviteT     = rooms.inviteT;
+      fresh.voiceInviteCT    = rooms.inviteCT;
+      const saved = await this.matchRepo.save(fresh);
+      this.gateway.emitToMatch(matchId, 'match_updated', saved);
+    } finally {
+      this.voiceCreating.delete(matchId);
+    }
   }
 
   private async createMatchPlayers(match: Match): Promise<void> {
@@ -532,13 +789,39 @@ export class MatchesService {
         match.scoreAByCapA === match.scoreAByCapB &&
         match.scoreBByCapA === match.scoreBByCapB;
 
+      // Победитель по версии каждого капитана
+      const winnerOf = (a?: number | null, b?: number | null): 'A' | 'B' | null =>
+        (a ?? 0) > (b ?? 0) ? 'A' : (b ?? 0) > (a ?? 0) ? 'B' : null;
+      const winnerByCapA = winnerOf(match.scoreAByCapA, match.scoreBByCapA);
+      const winnerByCapB = winnerOf(match.scoreAByCapB, match.scoreBByCapB);
+
+      let resolved = false;
       if (scoresMatch) {
         match.scoreA = match.scoreAByCapA;
         match.scoreB = match.scoreBByCapA;
         match.isDisputed = false;
+        resolved = true;
+      } else if (winnerByCapA && winnerByCapA === winnerByCapB) {
+        // Счёт расходится, но оба согласны КТО победил →
+        // засчитываем счёт, который указал капитан ПОБЕДИВШЕЙ команды.
+        if (winnerByCapA === 'A') { match.scoreA = match.scoreAByCapA; match.scoreB = match.scoreBByCapA; }
+        else { match.scoreA = match.scoreAByCapB; match.scoreB = match.scoreBByCapB; }
+        match.isDisputed = false;
+        resolved = true;
       } else {
+        // Настоящий спор (оба заявляют победу/ничью) — решает админ
         match.isDisputed = true;
-        // Keep scoreA/scoreB empty — admin will decide
+      }
+
+      // ── Клановый бой: при разрешённом счёте засчитываем сразу (без админа/KD) ──
+      if (match.isClanMatch && match.clanMode === 'battle' && resolved) {
+        match.winnerTeam = (match.scoreA ?? 0) > (match.scoreB ?? 0) ? 'A' : 'B';
+        match.status = MatchStatus.COMPLETED;
+        match.endedAt = new Date();
+        const savedC = await this.matchRepo.save(match);
+        await this.finalizeClanBattle(savedC);
+        this.gateway.emitToMatch(matchId, 'match_updated', savedC);
+        return savedC;
       }
 
       match.status = MatchStatus.RESULT_PENDING;
@@ -588,13 +871,65 @@ export class MatchesService {
     return saved;
   }
 
-  private async sendMissingResultToAdmin(match: Match, submittedBy: 'A' | 'B'): Promise<void> {
-    const botToken = process.env.BOT_TOKEN;
-    const chatId   = process.env.ADMIN_CHAT_ID;
-    const topicId  = process.env.TOPIC_MATCHES ? parseInt(process.env.TOPIC_MATCHES) : undefined;
-    const ngrokUrl = process.env.PUBLIC_URL || '';
-    if (!botToken || !chatId) return;
+  // ── Telegram → админ-чат ───────────────────────────────────────────────────
+  private get tgConfig() {
+    return {
+      botToken: process.env.BOT_TOKEN,
+      chatId: process.env.ADMIN_CHAT_ID,
+      topicId: process.env.TOPIC_MATCHES ? parseInt(process.env.TOPIC_MATCHES) : undefined,
+    };
+  }
 
+  /** Текстовое сообщение в админ-чат (с таймаутом и логом ошибки). */
+  private async tgSendMessage(text: string, matchId?: number): Promise<boolean> {
+    const { botToken, chatId, topicId } = this.tgConfig;
+    if (!botToken || !chatId) { this.logger.warn('TG admin chat: BOT_TOKEN/ADMIN_CHAT_ID не заданы'); return false; }
+    const reply_markup = matchId ? {
+      inline_keyboard: [[
+        { text: '🔵 Победа A', callback_data: `result_A_${matchId}` },
+        { text: '🔴 Победа B', callback_data: `result_B_${matchId}` },
+        { text: '🤝 Ничья', callback_data: `result_draw_${matchId}` },
+      ]],
+    } : undefined;
+    try {
+      await tgPost('sendMessage', {
+        chat_id: chatId, text, parse_mode: 'HTML',
+        ...(topicId ? { message_thread_id: topicId } : {}),
+        ...(reply_markup ? { reply_markup } : {}),
+      });
+      return true;
+    } catch (e: any) {
+      this.logger.warn(`TG sendMessage failed: ${e?.response?.data?.description || e?.message}`);
+      return false;
+    }
+  }
+
+  /** Скриншот в админ-чат: грузим ФАЙЛОМ с диска (надёжнее, чем photo по URL). */
+  private async tgSendScreenshot(relPath: string, caption: string): Promise<void> {
+    const { botToken, chatId, topicId } = this.tgConfig;
+    if (!botToken || !chatId || !relPath) return;
+    const abs = join(process.cwd(), relPath.replace(/^\//, ''));
+    try {
+      if (existsSync(abs)) {
+        const form = new FormData();
+        form.append('chat_id', chatId);
+        form.append('caption', caption);
+        if (topicId) form.append('message_thread_id', String(topicId));
+        form.append('photo', createReadStream(abs));
+        await tgPost('sendPhoto', form, {
+          headers: form.getHeaders(), timeout: 25000, maxBodyLength: Infinity,
+        });
+      } else {
+        // файла нет на диске — отправим ссылку текстом
+        const url = relPath.startsWith('http') ? relPath : `${process.env.PUBLIC_URL || ''}${relPath}`;
+        await this.tgSendMessage(`${caption}\n${url}`);
+      }
+    } catch (e: any) {
+      this.logger.warn(`TG sendPhoto failed: ${e?.response?.data?.description || e?.message}`);
+    }
+  }
+
+  private async sendMissingResultToAdmin(match: Match, submittedBy: 'A' | 'B'): Promise<void> {
     const missing = submittedBy === 'A' ? 'B' : 'A';
     const screenshot = submittedBy === 'A' ? match.resultScreenshotA : match.resultScreenshotB;
     const scoreA = submittedBy === 'A' ? match.scoreAByCapA : match.scoreAByCapB;
@@ -607,49 +942,11 @@ export class MatchesService {
       `❌ Капитан команды <b>${missing}</b> так и не загрузил результат.\n` +
       `Проверьте скриншот и подтвердите победителя вручную:`;
 
-    try {
-      const screenshotUrl = screenshot?.startsWith('http') ? screenshot : `${ngrokUrl}${screenshot}`;
-      await axios.post(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
-        chat_id: chatId,
-        photo: screenshotUrl,
-        caption: text,
-        parse_mode: 'HTML',
-        ...(topicId ? { message_thread_id: topicId } : {}),
-        reply_markup: {
-          inline_keyboard: [[
-            { text: '🏆 Победа A', callback_data: `result_A_${match.id}` },
-            { text: '🏆 Победа B', callback_data: `result_B_${match.id}` },
-            { text: '🤝 Ничья',   callback_data: `result_draw_${match.id}` },
-          ]],
-        },
-      });
-    } catch {
-      // Fallback: send text only
-      try {
-        await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-          chat_id: chatId,
-          text,
-          parse_mode: 'HTML',
-          ...(topicId ? { message_thread_id: topicId } : {}),
-          reply_markup: {
-            inline_keyboard: [[
-              { text: '🏆 Победа A', callback_data: `result_A_${match.id}` },
-              { text: '🏆 Победа B', callback_data: `result_B_${match.id}` },
-              { text: '🤝 Ничья',   callback_data: `result_draw_${match.id}` },
-            ]],
-          },
-        });
-      } catch {}
-    }
+    await this.tgSendMessage(text, match.id);
+    if (screenshot) await this.tgSendScreenshot(screenshot, `📸 Скрин капитана ${submittedBy} (${scoreA}:${scoreB})`);
   }
 
   private async sendResultToAdmin(match: Match): Promise<void> {
-    const botToken = process.env.BOT_TOKEN;
-    const chatId   = process.env.ADMIN_CHAT_ID;
-    const topicId  = process.env.TOPIC_MATCHES ? parseInt(process.env.TOPIC_MATCHES) : undefined;
-    const ngrokUrl = process.env.PUBLIC_URL || '';
-    if (!botToken || !chatId) return;
-
     let text: string;
     if (match.isDisputed) {
       text =
@@ -667,43 +964,13 @@ export class MatchesService {
         `Подтвердите победителя:`;
     }
 
-    try {
-      await axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-        chat_id: chatId,
-        text,
-        parse_mode: 'HTML',
-        ...(topicId ? { message_thread_id: topicId } : {}),
-        reply_markup: {
-          inline_keyboard: [[
-            { text: '🔵 Победа A', callback_data: `result_A_${match.id}` },
-            { text: '🔴 Победа B', callback_data: `result_B_${match.id}` },
-            { text: '🤝 Ничья', callback_data: `result_draw_${match.id}` },
-          ]],
-        },
-      });
-
-      if (match.resultScreenshotA && ngrokUrl) {
-        await axios.post(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
-          chat_id: chatId,
-          photo: `${ngrokUrl}${match.resultScreenshotA}`,
-          caption: match.isDisputed
-            ? `📸 Скрин капитана A (указал: ${match.scoreAByCapA}:${match.scoreBByCapA})`
-            : `📸 Скрин команды A`,
-          ...(topicId ? { message_thread_id: topicId } : {}),
-        }).catch(() => {});
-      }
-
-      if (match.resultScreenshotB && ngrokUrl) {
-        await axios.post(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
-          chat_id: chatId,
-          photo: `${ngrokUrl}${match.resultScreenshotB}`,
-          caption: match.isDisputed
-            ? `📸 Скрин капитана B (указал: ${match.scoreAByCapB}:${match.scoreBByCapB})`
-            : `📸 Скрин команды B`,
-          ...(topicId ? { message_thread_id: topicId } : {}),
-        }).catch(() => {});
-      }
-    } catch {}
+    await this.tgSendMessage(text, match.id);
+    if (match.resultScreenshotA) {
+      await this.tgSendScreenshot(match.resultScreenshotA, match.isDisputed ? `📸 Скрин капитана A (${match.scoreAByCapA}:${match.scoreBByCapA})` : `📸 Скрин команды A`);
+    }
+    if (match.resultScreenshotB) {
+      await this.tgSendScreenshot(match.resultScreenshotB, match.isDisputed ? `📸 Скрин капитана B (${match.scoreAByCapB}:${match.scoreBByCapB})` : `📸 Скрин команды B`);
+    }
   }
 
   async confirmResult(matchId: number, adminId: number, winner: 'A' | 'B' | 'draw'): Promise<Match> {
@@ -711,6 +978,21 @@ export class MatchesService {
     match.winnerTeam = winner;
     match.status = MatchStatus.COMPLETED;
     match.endedAt = new Date();
+
+    // Клановый бой: применяем рейтинг клана сразу (KD/личный ELO не считаем).
+    if (match.isClanMatch && match.clanMode === 'battle') {
+      if (winner !== 'draw') {
+        // согласуем счёт с решением админа, чтобы победитель совпадал
+        const a = match.scoreA ?? 0, b = match.scoreB ?? 0;
+        if (winner === 'A' && !(a > b)) { match.scoreA = Math.max(a, b + 1); }
+        if (winner === 'B' && !(b > a)) { match.scoreB = Math.max(b, a + 1); }
+      }
+      const savedClan = await this.matchRepo.save(match);
+      await this.finalizeClanBattle(savedClan);
+      this.gateway.emitToMatch(matchId, 'match_updated', savedClan);
+      this.discordService.deleteMatchVoiceRooms(match.voiceChannelTId, match.voiceChannelCTId).catch(() => {});
+      return savedClan;
+    }
 
     // ELO / stats applied only after moderator submits KD
     const saved = await this.matchRepo.save(match);
@@ -730,23 +1012,32 @@ export class MatchesService {
    * Used on app start to redirect players back to their match.
    */
   async getMyActiveMatch(userId: number): Promise<{ matchId: number } | null> {
-    const active = await this.matchRepo
+    const matches = await this.matchRepo
       .createQueryBuilder('m')
       .where('m.status IN (:...statuses)', {
         statuses: [MatchStatus.READY_CHECK, MatchStatus.MAP_VETO, MatchStatus.IN_PROGRESS, MatchStatus.RESULT_PENDING],
       })
       .andWhere('(:userId = ANY(m.team_a_ids) OR :userId = ANY(m.team_b_ids))', { userId })
-      // Don't redirect back if the player's team already submitted their result
-      // — they've done their part and should be free to leave
-      .andWhere(`NOT (
-        (:userId = ANY(m.team_a_ids) AND m.result_screenshot_a IS NOT NULL)
-        OR
-        (:userId = ANY(m.team_b_ids) AND m.result_screenshot_b IS NOT NULL)
-      )`, { userId })
       .orderBy('m.created_at', 'DESC')
-      .getOne();
+      .getMany();
 
-    return active ? { matchId: active.id } : null;
+    for (const m of matches) {
+      // RESULT_PENDING — решает админ, игроки свободны
+      if (m.status === MatchStatus.RESULT_PENDING) continue;
+      const isA = m.teamAIds.includes(userId);
+      const mySubmitted = isA ? !!m.resultScreenshotA : !!m.resultScreenshotB;
+      if (mySubmitted) continue; // своя команда загрузила — свободен
+      const aSub = !!m.resultScreenshotA, bSub = !!m.resultScreenshotB;
+      if (aSub || bSub) {
+        // соперник загрузил: обязан остаться только капитан незагрузившей команды
+        const pendingCaptain = aSub && !bSub ? m.captainBId : m.captainAId;
+        if (userId === pendingCaptain) return { matchId: m.id };
+        continue; // остальные свободны
+      }
+      // никто ещё не загрузил → игрок остаётся в матче
+      return { matchId: m.id };
+    }
+    return null;
   }
 
   async getMatch(id: number): Promise<Match> {
@@ -762,6 +1053,19 @@ export class MatchesService {
   async fetchMatchForClient(id: number): Promise<Match> {
     const match = await this.getMatch(id);
     await this.checkAndEscalateResultDeadline(match);
+    // Дозагрузка голосовых комнат, если они не создались при старте матча
+    // (бот Discord мог быть не готов). Создастся при первом поллинге.
+    if (match.status === MatchStatus.IN_PROGRESS && !match.isClanMatch && !match.voiceChannelTId) {
+      this.createVoiceRoomsInBackground(id).catch(() => {});
+    }
+    // Невход в лобби (5 мин) — отменяем матч даже после рестарта сервера
+    if (match.status === MatchStatus.IN_PROGRESS && match.lobbyLinkPublishedAt) {
+      const elapsed = Date.now() - new Date(match.lobbyLinkPublishedAt).getTime();
+      const allJoined = [...new Set([...match.teamAIds, ...match.teamBIds])].every(uid => match.lobbyJoinedPlayers.includes(uid));
+      if (elapsed >= 5 * 60 * 1000 && !allJoined) {
+        await this.penalizeLobbyDodgers(id).catch(() => {});
+      }
+    }
     // Return fresh state in case it was escalated
     return this.getMatch(id);
   }
@@ -832,49 +1136,111 @@ export class MatchesService {
     return saved;
   }
 
-  /** Ban players who didn't click the lobby link within the 5-min window. */
+  /**
+   * Если кто-то не зашёл по ссылке лобби за 5 минут — баним додж(еров) на 30 минут
+   * И ОТМЕНЯЕМ матч. Восстанавливаемо при рестарте: дёргается и по таймеру, и при
+   * поллинге клиентом (fetchMatchForClient).
+   */
   private async penalizeLobbyDodgers(matchId: number): Promise<void> {
     const match = await this.getMatch(matchId);
     if (match.status !== MatchStatus.IN_PROGRESS) return;
     if (!match.lobbyLinkPublishedAt) return;
 
     const elapsed = Date.now() - new Date(match.lobbyLinkPublishedAt).getTime();
-    if (elapsed < 4 * 60 * 1000) return; // too early — skip
+    if (elapsed < 5 * 60 * 1000) return; // окно ещё не вышло
 
     const allPlayers = [...new Set([...match.teamAIds, ...match.teamBIds])];
     const dodgers = allPlayers.filter(id => !match.lobbyJoinedPlayers.includes(id));
+    if (dodgers.length === 0) return; // все зашли — ничего не делаем
 
+    // Штрафуем тех, кто не зашёл
     for (const uid of dodgers) {
       const user = await this.userRepo.findOne({ where: { id: uid } });
       if (!user) continue;
-
-      const until = new Date(Date.now() + 30 * 60 * 1000); // 30 min ban
-      user.cooldownUntil = until;
+      user.cooldownUntil = new Date(Date.now() + 30 * 60 * 1000); // 30 min ban
       await this.userRepo.save(user);
-
       await this.notifRepo.save(
         this.notifRepo.create({
-          userId: uid,
-          type: 'penalty',
+          userId: uid, type: 'penalty',
           title: '🚫 Штраф: не зашёл в лобби',
-          body: 'Вы не перешли по ссылке лобби. Кулдаун 30 минут.',
+          body: 'Вы не перешли по ссылке лобби за 5 минут. Матч отменён. Кулдаун 30 минут.',
           meta: { type: 'lobby_dodge' },
         }),
       );
     }
+
+    // Отменяем матч
+    match.status = MatchStatus.CANCELLED;
+    match.endedAt = new Date();
+    const saved = await this.matchRepo.save(match);
+    this.gateway.emitToMatch(matchId, 'match_updated', saved);
+    this.discordService.deleteMatchVoiceRooms(match.voiceChannelTId, match.voiceChannelCTId).catch(() => {});
+
+    // Уведомляем остальных, что матч отменён
+    const others = allPlayers.filter(id => !dodgers.includes(id));
+    for (const uid of others) {
+      await this.notifRepo.save(this.notifRepo.create({
+        userId: uid, type: 'match',
+        title: 'Матч отменён',
+        body: 'Один из игроков не зашёл в лобби за 5 минут. Матч отменён.',
+        meta: { type: 'lobby_dodge_cancel', matchId },
+      }));
+    }
   }
 
-  async getMatchHistory(userId: number, page = 1, limit = 10) {
+  /**
+   * Хост не выложил ссылку на лобби за 5 минут после старта матча.
+   * → хост получает временный бан за додж (как при невходе в лобби), матч отменяется.
+   * Вызывается клиентами по таймеру.
+   */
+  async expireLobbyLink(matchId: number): Promise<Match> {
+    const match = await this.getMatch(matchId);
+    if (match.status !== MatchStatus.IN_PROGRESS) return match;
+    if (match.lobbyLink) return match; // ссылка уже есть — ничего не делаем
+    if (!match.startedAt) return match;
+    const elapsed = Date.now() - new Date(match.startedAt).getTime();
+    if (elapsed < 5 * 60 * 1000) return match; // ещё рано
+
+    // Штраф хосту — такой же кулдаун, как за невход в лобби (30 минут)
+    const host = await this.userRepo.findOne({ where: { id: match.hostId } });
+    if (host) {
+      host.cooldownUntil = new Date(Date.now() + 30 * 60 * 1000);
+      await this.userRepo.save(host);
+      await this.notifRepo.save(
+        this.notifRepo.create({
+          userId: host.id,
+          type: 'penalty',
+          title: '🚫 Штраф: не выложена ссылка на лобби',
+          body: 'Вы не опубликовали ссылку на лобби за 5 минут. Матч отменён. Кулдаун 30 минут.',
+          meta: { type: 'lobby_link_dodge' },
+        }),
+      );
+    }
+
+    match.status = MatchStatus.CANCELLED;
+    match.endedAt = new Date();
+    const saved = await this.matchRepo.save(match);
+    this.gateway.emitToMatch(matchId, 'match_updated', saved);
+    this.discordService
+      .deleteMatchVoiceRooms(match.voiceChannelTId, match.voiceChannelCTId)
+      .catch(() => {});
+    return saved;
+  }
+
+  async getMatchHistory(userId: number, page = 1, limit = 10, league: string | null = null) {
     const skip = (page - 1) * limit;
 
     const allPlayerRows = await this.playerRepo.find({ where: { userId } });
     if (!allPlayerRows.length) return { matches: [], total: 0, page, limit };
 
     const allMatchIds = [...new Set(allPlayerRows.map((p) => p.matchId))];
-    const completedMatches = await this.matchRepo.findBy({
+    const completedMatchesRaw = await this.matchRepo.findBy({
       id: In(allMatchIds),
       status: MatchStatus.COMPLETED,
     });
+    // История ведётся отдельно по лигам: league=null → обычные (без клана/лиги),
+    // league='cpl'|'cplq' → только матчи соответствующей лиги.
+    const completedMatches = completedMatchesRaw.filter((m) => league ? m.league === league : (!m.isClanMatch && !m.league));
     const matchMap = Object.fromEntries(completedMatches.map((m) => [m.id, m]));
     const completedIds = new Set(completedMatches.map((m) => m.id));
 
@@ -908,9 +1274,12 @@ export class MatchesService {
         winner:      m.winnerTeam,
         result:      m.winnerTeam === 'draw' ? 'draw' : won ? 'win' : 'loss',
         team:        isTeamA ? 'A' : 'B',
+        scoreMy:     isTeamA ? (m.scoreA ?? 0) : (m.scoreB ?? 0),
+        scoreOpp:    isTeamA ? (m.scoreB ?? 0) : (m.scoreA ?? 0),
         totalRounds: m.totalRounds ?? 0,
         createdAt,
         eloChange:   pick(rows, 'eloChange'),
+        eloAfter:    pick(rows, 'eloAfter'),
         kills:       pick(rows, 'kills'),
         deaths:      pick(rows, 'deaths'),
         assists:     pick(rows, 'assists'),
@@ -926,5 +1295,160 @@ export class MatchesService {
     merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     const total = merged.length;
     return { matches: merged.slice(skip, skip + limit), total, page, limit };
+  }
+
+  // ── Статистика игрока по картам (winrate / средний рейтинг) ────────────────
+  async getMapStats(userId: number, league: string | null = null) {
+    const rows = await this.playerRepo.find({ where: { userId } });
+    const matchIds = [...new Set(rows.map((r) => r.matchId))];
+    const matches = matchIds.length
+      ? await this.matchRepo.findBy({ id: In(matchIds) })
+      : [];
+    const mMap = new Map<number, Match>();
+    for (const m of matches) {
+      // Карт-стата ведётся отдельно по лигам (league=null → обычные).
+      if (m.status !== MatchStatus.COMPLETED) continue;
+      if (league ? m.league === league : (!m.isClanMatch && !m.league)) mMap.set(m.id, m);
+    }
+
+    const byMatch = new Map<number, MatchPlayer[]>();
+    for (const r of rows) {
+      if (!mMap.has(r.matchId)) continue;
+      const arr = byMatch.get(r.matchId) ?? [];
+      arr.push(r);
+      byMatch.set(r.matchId, arr);
+    }
+    const pick = (arr: MatchPlayer[], f: keyof MatchPlayer): number =>
+      arr.reduce((acc, r) => (Math.abs(Number(r[f] ?? 0)) > Math.abs(acc) ? Number(r[f] ?? 0) : acc), 0);
+
+    const acc: Record<string, { played: number; wins: number; losses: number; ratingSum: number; killsSum: number; rated: number }> = {};
+    for (const map of MAPS) acc[map] = { played: 0, wins: 0, losses: 0, ratingSum: 0, killsSum: 0, rated: 0 };
+
+    for (const [mid, arr] of byMatch) {
+      const m = mMap.get(mid)!;
+      const map = (m.map || '').toUpperCase();
+      const s = acc[map];
+      if (!s) continue;
+      s.played += 1;
+      const isTeamA = m.teamAIds.includes(userId);
+      if (m.winnerTeam === 'draw') {
+        /* ничья */
+      } else if ((isTeamA && m.winnerTeam === 'A') || (!isTeamA && m.winnerTeam === 'B')) {
+        s.wins += 1;
+      } else if (m.winnerTeam === 'A' || m.winnerTeam === 'B') {
+        s.losses += 1;
+      }
+      const rating = pick(arr, 'ratingMatch');
+      if (m.kdSubmitted && rating > 0) {
+        s.ratingSum += rating;
+        s.killsSum += pick(arr, 'kills');
+        s.rated += 1;
+      }
+    }
+
+    return MAPS.map((map) => {
+      const s = acc[map];
+      const decided = s.wins + s.losses;
+      return {
+        map,
+        played: s.played,
+        wins: s.wins,
+        losses: s.losses,
+        winRate: decided > 0 ? Math.round((s.wins / decided) * 1000) / 10 : 0,
+        avgRating: s.rated > 0 ? Math.round((s.ratingSum / s.rated) * 100) / 100 : 0,
+        avgKills: s.rated > 0 ? Math.round((s.killsSum / s.rated) * 10) / 10 : 0,
+      };
+    });
+  }
+
+  // ── Полная сводка завершённого матча (обе команды, статы, MVP) ─────────────
+  async getMatchSummary(matchId: number) {
+    const match = await this.matchRepo.findOne({ where: { id: matchId } });
+    if (!match || match.status !== MatchStatus.COMPLETED) {
+      throw new NotFoundException('Матч не найден');
+    }
+
+    const rows = await this.playerRepo.find({ where: { matchId } });
+    // Легаси-дубли: данные одного игрока могут быть расщеплены по нескольким
+    // строкам (в одной eloChange, в другой kills/rating). Поэтому собираем
+    // КАЖДОЕ поле отдельно — берём значение с наибольшим модулем по всем строкам
+    // игрока (как в getMatchHistory), а не одну «лучшую» строку целиком.
+    const byUser = new Map<number, MatchPlayer[]>();
+    for (const r of rows) {
+      const arr = byUser.get(r.userId) ?? [];
+      arr.push(r);
+      byUser.set(r.userId, arr);
+    }
+    const pick = (arr: MatchPlayer[] | undefined, f: keyof MatchPlayer): number =>
+      (arr ?? []).reduce(
+        (acc, r) => (Math.abs(Number(r[f] ?? 0)) > Math.abs(acc) ? Number(r[f] ?? 0) : acc),
+        0,
+      );
+
+    const dedup = (arr: number[]) => [...new Set(arr)].filter(Boolean);
+    const teamAIds = dedup(match.teamAIds);
+    const teamBIds = dedup(match.teamBIds);
+    const allIds = [...new Set([...teamAIds, ...teamBIds])];
+    const users = allIds.length ? await this.userRepo.findBy({ id: In(allIds) }) : [];
+    const uMap = Object.fromEntries(users.map((u) => [u.id, u]));
+
+    const buildPlayer = (uid: number) => {
+      const u: User | undefined = uMap[uid];
+      const p = byUser.get(uid);
+      return {
+        userId: uid,
+        nickname: u?.gameNickname || u?.firstName || `Игрок ${uid}`,
+        avatarUrl: u?.avatarUrl ?? null,
+        elo: u?.elo ?? 1000,
+        region: u?.region ?? null,
+        isVerified: u?.isVerified ?? false,
+        isAdmin: u?.isAdmin ?? false,
+        kills: pick(p, 'kills'),
+        deaths: pick(p, 'deaths'),
+        assists: pick(p, 'assists'),
+        kdMatch: pick(p, 'kdMatch'),
+        kprMatch: pick(p, 'kprMatch'),
+        aprMatch: pick(p, 'aprMatch'),
+        srMatch: pick(p, 'srMatch'),
+        ratingMatch: pick(p, 'ratingMatch'),
+        eloChange: pick(p, 'eloChange'),
+        eloAfter: pick(p, 'eloAfter'),
+      };
+    };
+
+    const teamA = teamAIds.map(buildPlayer);
+    const teamB = teamBIds.map(buildPlayer);
+
+    // MVP — наибольший rating среди всех (только если статистика внесена)
+    let mvpUserId: number | null = null;
+    if (match.kdSubmitted) {
+      const all = [...teamA, ...teamB];
+      const best = all.reduce<any>(
+        (acc, p) => (p.ratingMatch > (acc?.ratingMatch ?? -Infinity) ? p : acc),
+        null,
+      );
+      if (best && best.ratingMatch > 0) mvpUserId = best.userId;
+    }
+
+    const teamASide = match.teamASide ?? null;
+    const teamBSide = teamASide ? (teamASide === 'T' ? 'CT' : 'T') : null;
+
+    return {
+      id: match.id,
+      map: match.map ?? null,
+      status: match.status,
+      winnerTeam: match.winnerTeam,
+      scoreA: match.scoreA ?? 0,
+      scoreB: match.scoreB ?? 0,
+      totalRounds: match.totalRounds ?? 0,
+      isDisputed: match.isDisputed,
+      kdSubmitted: match.kdSubmitted,
+      teamASide,
+      teamBSide,
+      createdAt: match.createdAt,
+      mvpUserId,
+      teamA,
+      teamB,
+    };
   }
 }

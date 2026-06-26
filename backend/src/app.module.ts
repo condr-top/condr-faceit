@@ -7,6 +7,13 @@ import { APP_GUARD } from '@nestjs/core';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { MatchesModule } from './matches/matches.module';
+import { PartyModule } from './party/party.module';
+import { DmModule } from './dm/dm.module';
+import { DmProLobby } from './dm/entities/dm-pro-lobby.entity';
+import { CplModule } from './cpl/cpl.module';
+import { Season } from './cpl/entities/season.entity';
+import { CplWeekly } from './cpl/entities/cpl-weekly.entity';
+import { CplStanding } from './cpl/entities/cpl-standing.entity';
 import { QueueModule } from './queue/queue.module';
 import { LeaderboardModule } from './leaderboard/leaderboard.module';
 import { MissionsModule } from './missions/missions.module';
@@ -20,6 +27,7 @@ import { CoinsModule } from './coins/coins.module';
 import { ReportsModule } from './reports/reports.module';
 import { SupportModule } from './support/support.module';
 import { SupportMessage } from './support/entities/support-message.entity';
+import { SupportTicket } from './support/entities/support-ticket.entity';
 import { Report } from './reports/entities/report.entity';
 import { User } from './users/entities/user.entity';
 import { Match } from './matches/entities/match.entity';
@@ -33,10 +41,22 @@ import { UserInventory } from './shop/entities/user-inventory.entity';
 import { Tournament } from './tournaments/entities/tournament.entity';
 import { TournamentParticipant } from './tournaments/entities/tournament-participant.entity';
 import { Notification } from './notifications/entities/notification.entity';
-import { DailyReward } from './users/entities/daily-reward.entity';
 import { Friendship } from './users/entities/friendship.entity';
 import { CoinPurchase } from './coins/entities/coin-purchase.entity';
 import { EloHistory } from './users/entities/elo-history.entity';
+import { AppMeta } from './admin/entities/app-meta.entity';
+import { ClansModule } from './clans/clans.module';
+import { Clan } from './clans/entities/clan.entity';
+import { ClanMember } from './clans/entities/clan-member.entity';
+import { ClanRequest } from './clans/entities/clan-request.entity';
+import { ClanMatch } from './clans/entities/clan-match.entity';
+import { ClanEvent } from './clans/entities/clan-event.entity';
+import { ClanScrimListing } from './clans/entities/clan-scrim-listing.entity';
+import { ClanScrimResponse } from './clans/entities/clan-scrim-response.entity';
+import { ClanSeason } from './clans/entities/clan-season.entity';
+import { ClanSeasonResult } from './clans/entities/clan-season-result.entity';
+import { InviteModule } from './invite/invite.module';
+import { InviteCode } from './invite/entities/invite-code.entity';
 
 @Module({
   imports: [
@@ -59,12 +79,27 @@ import { EloHistory } from './users/entities/elo-history.entity';
           Tournament,
           TournamentParticipant,
           Notification,
-          DailyReward,
           Friendship,
           CoinPurchase,
           Report,
           SupportMessage,
+          SupportTicket,
           EloHistory,
+          AppMeta,
+          Clan,
+          ClanMember,
+          ClanRequest,
+          ClanMatch,
+          ClanEvent,
+          ClanScrimListing,
+          ClanScrimResponse,
+          ClanSeason,
+          ClanSeasonResult,
+          DmProLobby,
+          Season,
+          CplWeekly,
+          CplStanding,
+          InviteCode,
         ],
         synchronize: true,
         logging: false,
@@ -83,6 +118,9 @@ import { EloHistory } from './users/entities/elo-history.entity';
     AuthModule,
     UsersModule,
     MatchesModule,
+    PartyModule,
+    DmModule,
+    CplModule,
     QueueModule,
     LeaderboardModule,
     MissionsModule,
@@ -95,6 +133,8 @@ import { EloHistory } from './users/entities/elo-history.entity';
     CoinsModule,
     ReportsModule,
     SupportModule,
+    ClansModule,
+    InviteModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard }, // global rate limit

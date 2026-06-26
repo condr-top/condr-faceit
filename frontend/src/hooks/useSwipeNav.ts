@@ -7,7 +7,7 @@ import NProgress from 'nprogress'
 const TABS = [
   '/dashboard',
   '/leaderboard',
-  '/friends',
+  '/clans',
   '/shop',
   '/profile',
 ]

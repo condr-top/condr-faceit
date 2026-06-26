@@ -72,8 +72,6 @@ export class AuthService {
         avatarUrl: tgUser.photo_url || null,
         elo: 1000,
         coins: 0,
-        xp: 0,
-        level: 1,
         isAdmin: false,
         isBanned: false,
       });
@@ -109,13 +107,69 @@ export class AuthService {
         firstName: 'Dev',
         elo: 1000,
         coins: 500,
-        xp: 0,
-        level: 1,
         isAdmin: (process.env.ADMIN_TELEGRAM_IDS || '').split(',').map(Number).includes(telegramId),
         isBanned: false,
       });
       user = await this.userRepo.save(user);
     }
+    return this.login(user);
+  }
+
+  // ── Вход на сайт (web) ───────────────────────────────────────────────────────
+  // Эфемерные коды привязки: код → userId. Сгенерирован в вебаппе, погашается на сайте.
+  private webPairings = new Map<string, { userId: number; expires: number }>();
+  private readonly PAIR_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+  /** Сгенерировать одноразовый код привязки для текущего пользователя (вебапп). */
+  async createWebPairing(userId: number): Promise<{ code: string; expiresIn: number }> {
+    // чистим протухшие
+    const now = Date.now();
+    for (const [k, v] of this.webPairings) if (v.expires < now) this.webPairings.delete(k);
+
+    let code = '';
+    do {
+      code = Array.from({ length: 6 }, () => this.PAIR_ALPHABET[Math.floor(Math.random() * this.PAIR_ALPHABET.length)]).join('');
+    } while (this.webPairings.has(code));
+
+    this.webPairings.set(code, { userId, expires: now + 5 * 60 * 1000 });
+    return { code, expiresIn: 300 };
+  }
+
+  /** Погасить код привязки на сайте → выдать JWT того же аккаунта. */
+  async redeemWebPairing(rawCode: string) {
+    const code = (rawCode || '').toUpperCase().trim();
+    const rec = this.webPairings.get(code);
+    if (!rec || rec.expires < Date.now()) throw new UnauthorizedException('Код недействителен или истёк');
+    this.webPairings.delete(code);
+    const user = await this.userRepo.findOne({ where: { id: rec.userId } });
+    if (!user) throw new UnauthorizedException('Пользователь не найден');
+    return this.login(user);
+  }
+
+  /** Вход через Telegram Login Widget (внешний сайт). Подпись HMAC по SHA256(bot_token). */
+  async telegramWidgetLogin(data: Record<string, any>) {
+    const { hash, ...fields } = data || {};
+    if (!hash) throw new UnauthorizedException('Нет подписи');
+
+    const dataCheckString = Object.keys(fields)
+      .filter((k) => fields[k] != null)
+      .sort()
+      .map((k) => `${k}=${fields[k]}`)
+      .join('\n');
+
+    const secretKey = crypto.createHash('sha256').update(process.env.BOT_TOKEN || '').digest();
+    const computed = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
+    if (computed !== hash) throw new UnauthorizedException('Неверная подпись Telegram');
+
+    if (Date.now() / 1000 - Number(fields.auth_date || 0) > 86400) throw new UnauthorizedException('Данные устарели');
+
+    const user = await this.upsertUser({
+      id: Number(fields.id),
+      first_name: fields.first_name,
+      last_name: fields.last_name,
+      username: fields.username,
+      photo_url: fields.photo_url,
+    });
     return this.login(user);
   }
 

@@ -53,6 +53,10 @@ export class Match {
   @Column({ name: 'veto_turn', nullable: true })
   vetoTurn: string;
 
+  // Дедлайн текущего хода вето (15 секунд на бан); по истечении — авто-бан
+  @Column({ name: 'veto_turn_expires', nullable: true, type: 'timestamp' })
+  vetoTurnExpires: Date;
+
   @Column({ name: 'captain_a_id', nullable: true })
   captainAId: number;
 
@@ -144,6 +148,32 @@ export class Match {
 
   @Column({ name: 'elo_change', default: 0 })
   eloChange: number;
+
+  /** Матч создан через публичное лобби «Найти матч» (5v5), а не ranked-очередь/клан. */
+  @Column({ name: 'is_lobby', default: false })
+  isLobby: boolean;
+
+  /** Группы игроков-отрядов, которые обязаны попасть в одну команду (массив массивов userId). */
+  @Column({ name: 'party_groups', type: 'jsonb', nullable: true })
+  partyGroups: number[][] | null;
+
+  /** Лиговый матч: 'cpl' | 'cplq' | null. Не влияет на личный ELO/стату — идёт в CPR. */
+  @Column({ name: 'league', nullable: true })
+  league: string | null;
+
+  // ── Клановые матчи / праки ──
+  @Column({ name: 'is_clan_match', default: false })
+  isClanMatch: boolean;
+
+  // 'battle' — рейтинговый клановый бой 5x5; 'prac' — тренировочный (без результата/рейтинга)
+  @Column({ name: 'clan_mode', nullable: true })
+  clanMode: string | null;
+
+  @Column({ name: 'clan_a_id', nullable: true, type: 'int' })
+  clanAId: number | null;
+
+  @Column({ name: 'clan_b_id', nullable: true, type: 'int' })
+  clanBId: number | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

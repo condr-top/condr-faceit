@@ -5,33 +5,34 @@ import { motion, AnimatePresence, useSpring, useMotionValue, useTransform } from
 import { api } from '@/lib/api'
 import { RequireRegistration } from '@/components/providers/RequireRegistration'
 import { useAuthStore } from '@/store/authStore'
+import { Icon, IconName } from '@/components/ui/Icon'
 
 interface DailyMission {
   userMissionId: number; missionId: number
   title: string; description: string
   difficulty: 'easy' | 'medium' | 'hard'
-  goal: number; rewardCoins: number; rewardXp: number
+  goal: number; rewardCoins: number
   progress: number; isCompleted: boolean; isClaimed: boolean
 }
 
 interface DailyData {
   missions: DailyMission[]
   allCompleted: boolean; bonusClaimed: boolean
-  bonusCoins: number; bonusXp: number
+  bonusCoins: number
   missionStreak: number; msUntilReset: number
 }
 
-const DIFF = {
-  easy:   { label: 'Easy',   color: '#4ADE80', glow: 'rgba(74,222,128,0.3)',   icon: '⚡', rank: 1 },
-  medium: { label: 'Medium', color: '#FACC15', glow: 'rgba(250,204,21,0.3)',   icon: '🔥', rank: 2 },
-  hard:   { label: 'Hard',   color: '#F97316', glow: 'rgba(249,115,22,0.35)',  icon: '💀', rank: 3 },
+const DIFF: Record<string, { label: string; color: string; glow: string; icon: IconName; rank: number }> = {
+  easy:   { label: 'Easy',   color: '#4ADE80', glow: 'rgba(74,222,128,0.3)',   icon: 'bolt',  rank: 1 },
+  medium: { label: 'Medium', color: '#FACC15', glow: 'rgba(250,204,21,0.3)',   icon: 'flame', rank: 2 },
+  hard:   { label: 'Hard',   color: '#F97316', glow: 'rgba(249,115,22,0.35)',  icon: 'skull', rank: 3 },
 }
 
-const MILESTONES = [
-  { days: 3,  icon: '🔥', reward: '+150🪙',  color: '#F97316' },
-  { days: 7,  icon: '💎', reward: '+500🪙',  color: '#60A5FA' },
-  { days: 14, icon: '👑', reward: '+1000🪙', color: '#FACC15' },
-  { days: 30, icon: '🌟', reward: '+3000🪙', color: '#E8092E' },
+const MILESTONES: { days: number; icon: IconName; reward: string; color: string }[] = [
+  { days: 3,  icon: 'flame',    reward: '+150',  color: '#F97316' },
+  { days: 7,  icon: 'gem',      reward: '+500',  color: '#60A5FA' },
+  { days: 14, icon: 'crown',    reward: '+1000', color: '#FACC15' },
+  { days: 30, icon: 'sparkles', reward: '+3000', color: '#E8092E' },
 ]
 
 function useCountdown(ms: number) {
@@ -147,12 +148,13 @@ function MissionCard({ m, idx, onClaim }: { m: DailyMission; idx: number; onClai
                 background: `${d.color}18`, color: d.color,
                 border: `1px solid ${d.color}30`,
                 textTransform: 'uppercase', letterSpacing: '0.08em',
+                display: 'inline-flex', alignItems: 'center', gap: 4,
               }}>
-                {d.icon} {d.label}
+                <Icon name={d.icon} size={10} /> {d.label}
               </span>
               {m.isClaimed && (
-                <span style={{ fontSize: 9, color: '#22C55E', fontWeight: 800, background: 'rgba(34,197,94,0.12)', padding: '2px 8px', borderRadius: 20, border: '1px solid rgba(34,197,94,0.25)' }}>
-                  ✓ Получено
+                <span style={{ fontSize: 9, color: '#22C55E', fontWeight: 800, background: 'rgba(34,197,94,0.12)', padding: '2px 8px', borderRadius: 20, border: '1px solid rgba(34,197,94,0.25)', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                  <Icon name="check" size={10} />Получено
                 </span>
               )}
             </div>
@@ -168,8 +170,8 @@ function MissionCard({ m, idx, onClaim }: { m: DailyMission; idx: number; onClai
             <div style={{ marginBottom: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#4B5563', marginBottom: 4 }}>
                 <span style={{ fontVariantNumeric: 'tabular-nums' }}>{m.progress} / {m.goal}</span>
-                <span style={{ color: m.isCompleted ? d.color : '#4B5563', fontWeight: 700 }}>
-                  {m.isCompleted ? '✓ Выполнено!' : `осталось ${m.goal - m.progress}`}
+                <span style={{ color: m.isCompleted ? d.color : '#4B5563', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                  {m.isCompleted ? <><Icon name="check" size={11} />Выполнено!</> : `осталось ${m.goal - m.progress}`}
                 </span>
               </div>
               <div style={{ height: 4, background: 'rgba(255,255,255,0.06)', borderRadius: 2, overflow: 'hidden' }}>
@@ -190,8 +192,7 @@ function MissionCard({ m, idx, onClaim }: { m: DailyMission; idx: number; onClai
 
             {/* Rewards */}
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <span style={{ fontSize: 12, fontWeight: 800, color: '#EAB308' }}>+{m.rewardCoins} 🪙</span>
-              <span style={{ fontSize: 11, color: '#60A5FA' }}>+{m.rewardXp} XP</span>
+              <span style={{ fontSize: 12, fontWeight: 800, color: '#EAB308', display: 'inline-flex', alignItems: 'center', gap: 4 }}>+{m.rewardCoins} <Icon name="coins" size={12} /></span>
             </div>
           </div>
         </div>
@@ -219,7 +220,7 @@ function MissionCard({ m, idx, onClaim }: { m: DailyMission; idx: number; onClai
               <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
                 style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(0,0,0,0.3)', borderTopColor: '#000' }}
               />
-            ) : '🎁'} {claiming ? 'Получаем...' : 'Забрать награду'}
+            ) : <Icon name="gift" size={15} />} {claiming ? 'Получаем...' : 'Забрать награду'}
           </motion.button>
         )}
       </div>
@@ -273,16 +274,15 @@ function BonusBlock({ data, completedCount, onClaim }: { data: DailyData; comple
           <div style={{ fontSize: 10, color: '#374151', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>
             Ежедневный бонус
           </div>
-          <div style={{ fontSize: 16, fontWeight: 900, color: '#fff', marginBottom: 4 }}>
-            {data.bonusClaimed ? '✅ Получен сегодня' : 'Выполни все 3 задания'}
+          <div style={{ fontSize: 16, fontWeight: 900, color: '#fff', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+            {data.bonusClaimed ? <><Icon name="check-circle" size={16} color="#22C55E" />Получен сегодня</> : 'Выполни все 3 задания'}
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
-            <span style={{ fontSize: 14, fontWeight: 800, color: '#EAB308' }}>+{data.bonusCoins} 🪙</span>
-            <span style={{ fontSize: 13, color: '#60A5FA' }}>+{data.bonusXp} XP</span>
+            <span style={{ fontSize: 14, fontWeight: 800, color: '#EAB308', display: 'inline-flex', alignItems: 'center', gap: 4 }}>+{data.bonusCoins} <Icon name="coins" size={13} /></span>
           </div>
           {data.bonusClaimed && data.missionStreak > 0 && (
-            <div style={{ fontSize: 11, color: '#E8092E', marginTop: 6, fontWeight: 700 }}>
-              🔥 Стрик: {data.missionStreak} дней подряд
+            <div style={{ fontSize: 11, color: '#E8092E', marginTop: 6, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5 }}>
+              <Icon name="flame" size={12} />Стрик: {data.missionStreak} дней подряд
             </div>
           )}
         </div>
@@ -326,7 +326,7 @@ function BonusBlock({ data, completedCount, onClaim }: { data: DailyData; comple
             opacity: claiming ? 0.7 : 1,
           }}
         >
-          {claiming ? '...' : '🏆 Забрать дневной бонус'}
+          {claiming ? '...' : <><Icon name="trophy" size={16} />Забрать дневной бонус</>}
         </motion.button>
       )}
     </motion.div>
@@ -334,7 +334,7 @@ function BonusBlock({ data, completedCount, onClaim }: { data: DailyData; comple
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
-function Toast({ coins, xp, label, onClose }: { coins: number; xp: number; label?: string; onClose: () => void }) {
+function Toast({ coins, label, onClose }: { coins: number; label?: string; onClose: () => void }) {
   useEffect(() => { const t = setTimeout(onClose, 2800); return () => clearTimeout(t) }, [])
   return (
     <motion.div
@@ -353,24 +353,202 @@ function Toast({ coins, xp, label, onClose }: { coins: number; xp: number; label
       <motion.div
         animate={{ rotate: [0, -10, 10, -10, 10, 0], scale: [1, 1.2, 1] }}
         transition={{ duration: 0.5 }}
-        style={{ fontSize: 32, marginBottom: 6 }}
-      >🎉</motion.div>
+        style={{ marginBottom: 6, color: '#22C55E', display: 'flex', justifyContent: 'center' }}
+      ><Icon name="sparkles" size={30} /></motion.div>
       <div style={{ fontWeight: 900, fontSize: 15, color: '#fff', marginBottom: 6 }}>Награда получена!</div>
       <div style={{ display: 'flex', justifyContent: 'center', gap: 14 }}>
-        <span style={{ fontSize: 15, color: '#EAB308', fontWeight: 800 }}>+{coins} 🪙</span>
-        <span style={{ fontSize: 14, color: '#60A5FA', fontWeight: 700 }}>+{xp} XP</span>
+        <span style={{ fontSize: 15, color: '#EAB308', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 4 }}>+{coins} <Icon name="coins" size={14} /></span>
       </div>
       {label && <div style={{ fontSize: 11, color: '#E8092E', marginTop: 6, fontWeight: 700 }}>{label}</div>}
     </motion.div>
   )
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+//  ACHIEVEMENTS
+// ══════════════════════════════════════════════════════════════════════════════
+type AchCat = 'progress' | 'combat' | 'rank' | 'streak' | 'fun'
+interface Achievement {
+  key: string; title: string; description: string; icon: string; color: string
+  category: AchCat; goal: number; unit: string; rewardCoins: number; secret: boolean
+  current: number; unlocked: boolean; claimed: boolean; unlockedAt: string | null
+}
+interface AchData { achievements: Achievement[]; unlocked: number; total: number; claimable: number }
+
+const CATS: { key: AchCat | 'all'; label: string; color: string }[] = [
+  { key: 'all',      label: 'Все',      color: '#9CA3AF' },
+  { key: 'progress', label: 'Прогресс', color: '#60A5FA' },
+  { key: 'combat',   label: 'Бой',      color: '#E8092E' },
+  { key: 'rank',     label: 'Ранг',     color: '#A855F7' },
+  { key: 'streak',   label: 'Стрик',    color: '#F59E0B' },
+  { key: 'fun',      label: 'Веселье',  color: '#EAB308' },
+]
+
+function AchievementCard({ a, idx, onClaim }: { a: Achievement; idx: number; onClaim: () => Promise<void> }) {
+  const [claiming, setClaiming] = useState(false)
+  const locked = !a.unlocked
+  const claimable = a.unlocked && !a.claimed
+  const secretLocked = a.secret && locked
+  const c = a.color
+  const pct = Math.min((a.current / a.goal) * 100, 100)
+  const title = secretLocked ? '???' : a.title
+  const desc = secretLocked ? 'Скрытое достижение — открой его сам' : a.description
+  const iconName = (secretLocked ? 'help' : a.icon) as IconName
+
+  const handle = async () => { setClaiming(true); try { await onClaim() } finally { setClaiming(false) } }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: Math.min(idx * 0.04, 0.4), type: 'spring', stiffness: 280, damping: 24 }}
+      style={{
+        borderRadius: 18, padding: 14, position: 'relative', overflow: 'hidden',
+        background: claimable ? `linear-gradient(135deg, ${c}14, rgba(255,255,255,0.03) 60%)` : 'rgba(255,255,255,0.03)',
+        border: `1px solid ${claimable ? `${c}55` : 'rgba(255,255,255,0.06)'}`,
+        boxShadow: claimable ? `0 8px 28px ${c}1f` : 'none',
+        opacity: a.claimed ? 0.72 : 1,
+      }}>
+      {claimable && <>
+        <div style={{ position: 'absolute', top: 0, left: '10%', right: '10%', height: 1, background: `linear-gradient(90deg, transparent, ${c}, transparent)` }} />
+        <motion.div animate={{ x: ['-120%', '220%'] }} transition={{ duration: 2.6, repeat: Infinity, repeatDelay: 2.5, ease: 'linear' }}
+          style={{ position: 'absolute', top: 0, bottom: 0, width: '30%', background: `linear-gradient(90deg, transparent, ${c}14, transparent)`, pointerEvents: 'none' }} />
+      </>}
+      <div style={{ position: 'absolute', top: -10, right: -8, opacity: a.unlocked ? 0.1 : 0.05, pointerEvents: 'none' }}><Icon name={iconName} size={64} color={c} /></div>
+
+      <div style={{ display: 'flex', gap: 13, alignItems: 'flex-start', position: 'relative' }}>
+        {/* Icon badge */}
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          {claimable && <motion.div animate={{ opacity: [0.3, 0.65, 0.3], scale: [1, 1.12, 1] }} transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+            style={{ position: 'absolute', inset: -8, borderRadius: '50%', background: `radial-gradient(circle, ${c}55, transparent 70%)`, pointerEvents: 'none' }} />}
+          <div style={{ position: 'relative', width: 50, height: 50, borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: a.unlocked ? `linear-gradient(135deg, ${c}, ${c}88)` : 'rgba(255,255,255,0.05)',
+            border: a.unlocked ? 'none' : '1px solid rgba(255,255,255,0.08)',
+            boxShadow: a.unlocked ? `0 6px 18px ${c}44` : 'none', filter: a.claimed ? 'grayscale(0.4)' : 'none' }}>
+            {a.unlocked && <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '45%', borderRadius: '16px 16px 0 0', background: 'linear-gradient(180deg, rgba(255,255,255,0.28), transparent)' }} />}
+            <Icon name={iconName} size={25} color={a.unlocked ? '#fff' : '#4B5563'} />
+          </div>
+          {a.claimed && <div style={{ position: 'absolute', right: -3, bottom: -3, width: 20, height: 20, borderRadius: '50%', background: '#22C55E', border: '2px solid #0a0a0f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="check" size={11} color="#fff" /></div>}
+        </div>
+
+        {/* Content */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 3 }}>
+            <span style={{ fontSize: 14.5, fontWeight: 900, color: a.unlocked ? '#fff' : '#9CA3AF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</span>
+            {locked && !secretLocked && <Icon name="lock" size={12} color="#4B5563" />}
+            {a.claimed && <span style={{ fontSize: 9, fontWeight: 800, color: '#22C55E', background: 'rgba(34,197,94,0.12)', padding: '2px 7px', borderRadius: 20 }}>Получено</span>}
+          </div>
+          <div style={{ fontSize: 11.5, color: '#6B7280', lineHeight: 1.4, marginBottom: 9 }}>{desc}</div>
+
+          {/* Progress */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, marginBottom: 4 }}>
+            <span style={{ color: '#4B5563', fontVariantNumeric: 'tabular-nums' }}>{secretLocked ? '???' : `${a.current.toLocaleString()} / ${a.goal.toLocaleString()}${a.unit ? ' ' + a.unit : ''}`}</span>
+            <span style={{ fontSize: 11, fontWeight: 800, color: '#EAB308', display: 'inline-flex', alignItems: 'center', gap: 3 }}>+{a.rewardCoins} <Icon name="coins" size={11} /></span>
+          </div>
+          <div style={{ height: 5, background: 'rgba(255,255,255,0.06)', borderRadius: 3, overflow: 'hidden' }}>
+            <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.9, ease: 'easeOut', delay: 0.1 }}
+              style={{ height: '100%', borderRadius: 3, background: a.unlocked ? `linear-gradient(90deg, ${c}, ${c}cc)` : `linear-gradient(90deg, ${c}66, ${c}aa)`, boxShadow: a.unlocked ? `0 0 8px ${c}66` : 'none' }} />
+          </div>
+        </div>
+      </div>
+
+      {claimable && (
+        <motion.button initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} whileTap={{ scale: 0.97 }} onClick={handle} disabled={claiming}
+          style={{ width: '100%', marginTop: 13, padding: '11px 0', borderRadius: 12, border: 'none', background: `linear-gradient(135deg, ${c}, ${c}aa)`, color: '#fff', fontWeight: 900, fontSize: 13, cursor: claiming ? 'default' : 'pointer', boxShadow: `0 4px 18px ${c}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, position: 'relative' }}>
+          {claiming ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff' }} /> : <Icon name="gift" size={15} color="#fff" />}
+          {claiming ? 'Получаем…' : `Забрать ${a.rewardCoins} монет`}
+        </motion.button>
+      )}
+    </motion.div>
+  )
+}
+
+function AchievementsView({ onToast, refreshUser }: { onToast: (t: { coins: number; label?: string }) => void; refreshUser: () => void }) {
+  const [data, setData] = useState<AchData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [cat, setCat] = useState<AchCat | 'all'>('all')
+
+  const load = async () => {
+    try { const r = await api.get('/achievements'); setData(r.data) } catch {} finally { setLoading(false) }
+  }
+  useEffect(() => { load() }, [])
+
+  const claim = async (key: string) => {
+    const r = await api.post(`/achievements/${key}/claim`)
+    onToast({ coins: r.data.coins, label: 'Достижение' })
+    await load(); refreshUser()
+  }
+
+  if (loading) return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {[0, 1, 2, 3].map(i => <motion.div key={i} animate={{ opacity: [0.3, 0.6, 0.3] }} transition={{ duration: 1.4, repeat: Infinity, delay: i * 0.2 }} style={{ height: 96, borderRadius: 18, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }} />)}
+    </div>
+  )
+  if (!data) return null
+
+  const pct = data.total ? Math.round((data.unlocked / data.total) * 100) : 0
+  const list = cat === 'all' ? data.achievements : data.achievements.filter(a => a.category === cat)
+  // claimable первыми, затем разблокированные, затем по прогрессу
+  const sorted = [...list].sort((a, b) => {
+    const score = (x: Achievement) => (x.unlocked && !x.claimed ? 0 : x.claimed ? 2 : 1)
+    if (score(a) !== score(b)) return score(a) - score(b)
+    return (b.current / b.goal) - (a.current / a.goal)
+  })
+
+  return (
+    <div>
+      {/* Summary */}
+      <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: 'spring', stiffness: 280, damping: 26 }}
+        style={{ borderRadius: 20, padding: 16, marginBottom: 14, position: 'relative', overflow: 'hidden',
+          background: 'radial-gradient(120% 120% at 0% 0%, rgba(34,197,94,0.18), transparent 50%), radial-gradient(120% 120% at 100% 100%, rgba(168,85,247,0.12), transparent 52%), linear-gradient(160deg, #0c0c11, #08080b)',
+          border: '1px solid rgba(34,197,94,0.28)', boxShadow: '0 14px 44px rgba(34,197,94,0.12)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <div>
+            <div style={{ fontSize: 10, color: '#6B7280', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em' }}>Разблокировано</div>
+            <div style={{ fontSize: 30, fontWeight: 900, letterSpacing: '-1px', lineHeight: 1.05, marginTop: 4 }}>
+              <span style={{ color: '#22C55E' }}>{data.unlocked}</span>
+              <span style={{ color: '#374151', fontSize: 20 }}> / {data.total}</span>
+            </div>
+          </div>
+          {data.claimable > 0 && (
+            <motion.div animate={{ scale: [1, 1.06, 1] }} transition={{ duration: 1.8, repeat: Infinity }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'rgba(234,179,8,0.14)', border: '1px solid rgba(234,179,8,0.35)', borderRadius: 20, padding: '6px 12px', fontSize: 12, fontWeight: 900, color: '#EAB308' }}>
+              <Icon name="gift" size={14} color="#EAB308" />{data.claimable} к получению
+            </motion.div>
+          )}
+        </div>
+        <div style={{ height: 7, background: 'rgba(255,255,255,0.07)', borderRadius: 4, overflow: 'hidden' }}>
+          <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 1, ease: 'easeOut', delay: 0.2 }}
+            style={{ height: '100%', borderRadius: 4, background: 'linear-gradient(90deg, #16a34a, #22C55E, #4ADE80)', boxShadow: '0 0 10px rgba(74,222,128,0.5)' }} />
+        </div>
+      </motion.div>
+
+      {/* Category filter */}
+      <div style={{ display: 'flex', gap: 7, overflowX: 'auto', paddingBottom: 4, marginBottom: 14, WebkitOverflowScrolling: 'touch' }}>
+        {CATS.map(ct => {
+          const active = cat === ct.key
+          return (
+            <button key={ct.key} onClick={() => setCat(ct.key)}
+              style={{ flexShrink: 0, padding: '8px 14px', borderRadius: 11, cursor: 'pointer', fontSize: 13, fontWeight: 700, color: active ? '#fff' : '#9CA3AF', background: active ? `${ct.color}26` : 'rgba(255,255,255,0.04)', border: `1px solid ${active ? ct.color : 'transparent'}`, transition: 'all .2s' }}>
+              {ct.label}
+            </button>
+          )
+        })}
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
+        {sorted.map((a, i) => <AchievementCard key={a.key} a={a} idx={i} onClaim={() => claim(a.key)} />)}
+      </div>
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function MissionsPage() {
   const { refreshUser } = useAuthStore()
+  const [view, setView] = useState<'daily' | 'achievements'>('daily')
   const [data, setData] = useState<DailyData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [toast, setToast] = useState<{ coins: number; xp: number; label?: string } | null>(null)
+  const [toast, setToast] = useState<{ coins: number; label?: string } | null>(null)
   const timer = useCountdown(data?.msUntilReset ?? 0)
 
   const load = async () => {
@@ -382,13 +560,13 @@ export default function MissionsPage() {
 
   const claim = async (id: number) => {
     const r = await api.post(`/missions/${id}/claim`)
-    setToast({ coins: r.data.coins, xp: r.data.xp })
+    setToast({ coins: r.data.coins })
     load(); refreshUser()
   }
 
   const claimBonus = async () => {
     const r = await api.post('/missions/daily-bonus')
-    setToast({ coins: r.data.coins, xp: r.data.xp, label: r.data.streakReward?.label ?? `Стрик: ${r.data.missionStreak} дней 🔥` })
+    setToast({ coins: r.data.coins, label: r.data.streakReward?.label ?? `Стрик: ${r.data.missionStreak} дней` })
     load(); refreshUser()
   }
 
@@ -412,20 +590,20 @@ export default function MissionsPage() {
                 width: 38, height: 38, borderRadius: 11, flexShrink: 0,
                 background: 'linear-gradient(135deg, rgba(34,197,94,0.25), rgba(74,222,128,0.12))',
                 border: '1px solid rgba(34,197,94,0.3)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
-              }}>🎯</div>
+                display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#22C55E',
+              }}><Icon name="target" size={18} /></div>
               <div>
                 <h1 style={{ fontSize: 22, fontWeight: 900, color: '#fff', margin: 0, letterSpacing: '-0.5px', lineHeight: 1 }}>
                   Задания
                 </h1>
                 <div style={{ fontSize: 10, color: '#4B5563', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
-                  Обновление через <b style={{ color: '#6B7280' }}>{timer.str}</b>
+                  {view === 'daily' ? <>Обновление через <b style={{ color: '#6B7280' }}>{timer.str}</b></> : 'Награды за стиль игры'}
                 </div>
               </div>
             </div>
 
             {/* Streak badge */}
-            {streak > 0 && (
+            {streak > 0 && view === 'daily' && (
               <motion.div
                 initial={{ opacity: 0, scale: 0.7 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -438,8 +616,8 @@ export default function MissionsPage() {
                 <motion.div
                   animate={{ scale: [1, 1.2, 1] }}
                   transition={{ duration: 2, repeat: Infinity }}
-                  style={{ fontSize: 20, lineHeight: 1, marginBottom: 2 }}
-                >🔥</motion.div>
+                  style={{ lineHeight: 1, marginBottom: 2, color: '#E8092E', display: 'flex', justifyContent: 'center' }}
+                ><Icon name="flame" size={20} /></motion.div>
                 <div style={{ fontSize: 16, fontWeight: 900, color: '#E8092E', lineHeight: 1 }}>{streak}</div>
                 <div style={{ fontSize: 9, color: '#6B7280', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                   ДНЕЙ
@@ -448,6 +626,21 @@ export default function MissionsPage() {
             )}
           </motion.div>
 
+          {/* ── TABS ── */}
+          <div style={{ display: 'flex', gap: 6, margin: '14px 0 16px', background: 'rgba(255,255,255,0.04)', padding: 4, borderRadius: 14, border: '1px solid rgba(255,255,255,0.05)' }}>
+            {([['daily', 'Ежедневные', 'target'], ['achievements', 'Достижения', 'medal']] as [typeof view, string, IconName][]).map(([v, label, ic]) => (
+              <button key={v} onClick={() => setView(v)}
+                style={{ flex: 1, position: 'relative', padding: '10px 0', border: 'none', cursor: 'pointer', background: 'none', borderRadius: 10, fontSize: 13.5, fontWeight: 800, color: view === v ? '#fff' : '#6B7280', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'color .2s' }}>
+                {view === v && <motion.div layoutId="missionTab" style={{ position: 'absolute', inset: 0, borderRadius: 10, background: 'linear-gradient(135deg, #22C55Ecc, #4ADE80cc)', zIndex: -1, boxShadow: '0 4px 14px rgba(34,197,94,0.4)' }} />}
+                <Icon name={ic} size={15} color={view === v ? '#fff' : '#6B7280'} /> {label}
+              </button>
+            ))}
+          </div>
+
+          {view === 'achievements' && <AchievementsView onToast={setToast} refreshUser={refreshUser} />}
+
+          {view === 'daily' && (
+          <>
           {/* ── STREAK MILESTONES ── */}
           <motion.div
             initial={{ opacity: 0, y: 8 }}
@@ -455,7 +648,7 @@ export default function MissionsPage() {
             transition={{ delay: 0.06 }}
             style={{
               display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8,
-              margin: '14px 0 16px',
+              margin: '0 0 16px',
             }}
           >
             {MILESTONES.map((ms, i) => {
@@ -484,13 +677,13 @@ export default function MissionsPage() {
                   <motion.div
                     animate={reached ? { rotate: [0, -5, 5, 0] } : {}}
                     transition={{ duration: 0.5, delay: i * 0.1 }}
-                    style={{ fontSize: 22, filter: reached ? 'none' : 'grayscale(1) opacity(0.4)', marginBottom: 4 }}
-                  >{ms.icon}</motion.div>
+                    style={{ filter: reached ? 'none' : 'opacity(0.4)', marginBottom: 4, color: reached ? ms.color : '#6B7280', display: 'flex', justifyContent: 'center' }}
+                  ><Icon name={ms.icon} size={22} /></motion.div>
                   <div style={{ fontSize: 12, fontWeight: 900, color: reached ? ms.color : '#374151', marginBottom: 2 }}>
                     {ms.days}д
                   </div>
-                  <div style={{ fontSize: 9, color: reached ? ms.color + 'cc' : '#2D2D2D', fontWeight: 700 }}>
-                    {ms.reward}
+                  <div style={{ fontSize: 9, color: reached ? ms.color + 'cc' : '#2D2D2D', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
+                    {ms.reward}<Icon name="coins" size={9} />
                   </div>
                 </motion.div>
               )
@@ -561,11 +754,13 @@ export default function MissionsPage() {
           {data && !loading && (
             <BonusBlock data={data} completedCount={completedCount} onClaim={claimBonus} />
           )}
+          </>
+          )}
 
         </div>
 
         <AnimatePresence>
-          {toast && <Toast coins={toast.coins} xp={toast.xp} label={toast.label} onClose={() => setToast(null)} />}
+          {toast && <Toast coins={toast.coins} label={toast.label} onClose={() => setToast(null)} />}
         </AnimatePresence>
       </div>
     </RequireRegistration>

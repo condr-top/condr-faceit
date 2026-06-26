@@ -9,6 +9,14 @@ import { api } from '@/lib/api'
 import { connectSocket } from '@/lib/socket'
 import { MAPS } from '@/lib/constants'
 import { playMatchFound, playReadyCheck } from '@/lib/sounds'
+import { Icon } from '@/components/ui/Icon'
+import { Avatar } from '@/components/ui/Avatar'
+import { getEloRank } from '@/lib/eloRank'
+import { EloRing } from '@/components/ui/EloRing'
+import { ReportModal } from '@/components/reports/ReportModal'
+
+// Module-scope map image helper (для компонентов вне основного)
+const mapImgUrl = (name: string) => `/maps/${name.charAt(0).toUpperCase()}${name.slice(1).toLowerCase()}.webp`
 
 // Shared card style
 const cardStyle = {
@@ -32,12 +40,16 @@ export default function MatchPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
-  const [players, setPlayers] = useState<Record<number, { gameNickname: string; gameId: string }>>({})
+  const [players, setPlayers] = useState<Record<number, { gameNickname: string; gameId: string; avatarUrl?: string; elo?: number; isVerified?: boolean }>>({})
+  const [reportTarget, setReportTarget] = useState<{ id: number; name: string } | null>(null)
   const [lobbyLinkInput, setLobbyLinkInput] = useState('')
   const [lobbyLinkSaving, setLobbyLinkSaving] = useState(false)
   const [lobbyEditing, setLobbyEditing] = useState(false)
   const [submitUnlockSecondsLeft, setSubmitUnlockSecondsLeft] = useState<number | null>(null)
   const [resultDeadlineLeft, setResultDeadlineLeft] = useState<number | null>(null)
+  const [vetoSecondsLeft, setVetoSecondsLeft] = useState<number | null>(null)
+  const [revealMap, setRevealMap] = useState<string | null>(null)
+  const [lobbyLinkSecondsLeft, setLobbyLinkSecondsLeft] = useState<number | null>(null)
 
   useEffect(() => {
     const teamAIds = currentMatch?.teamAIds ?? []
@@ -47,8 +59,8 @@ export default function MatchPage() {
     api.get('/users/batch', { params: { ids: ids.join(',') } })
       .then((r) => {
         if (!Array.isArray(r.data) || !r.data.length) return
-        const map: Record<number, { gameNickname: string; gameId: string }> = {}
-        r.data.forEach((p: any) => { map[p.id] = { gameNickname: p.gameNickname, gameId: p.gameId } })
+        const map: Record<number, { gameNickname: string; gameId: string; avatarUrl?: string; elo?: number; isVerified?: boolean }> = {}
+        r.data.forEach((p: any) => { map[p.id] = { gameNickname: p.gameNickname, gameId: p.gameId, avatarUrl: p.avatarUrl, elo: p.elo, isVerified: p.isVerified } })
         setPlayers((prev) => ({ ...prev, ...map }))
       })
       .catch(() => {})
@@ -89,12 +101,21 @@ export default function MatchPage() {
       : currentMatch.teamBIds?.includes(user?.id ?? -1)
         ? !!currentMatch.resultScreenshotB
         : true
+    // Когда хотя бы один капитан загрузил результат — выйти могут все,
+    // КРОМЕ капитана команды, которая ещё не загрузила (он обязан ответить).
+    const aSub = !!currentMatch.resultScreenshotA
+    const bSub = !!currentMatch.resultScreenshotB
+    const anySub = aSub || bSub
+    const blockedCaptain = aSub && !bSub ? currentMatch.captainBId
+      : bSub && !aSub ? currentMatch.captainAId : null
+    const iAmBlockedCaptain = blockedCaptain != null && user?.id === blockedCaptain
     const over =
       currentMatch.status === 'completed'      ||
       currentMatch.status === 'cancelled'      ||
       currentMatch.status === 'result_pending' ||
       currentMatch.status === 'ready_check'    ||
-      mySubmitted
+      mySubmitted ||
+      (anySub && !iAmBlockedCaptain)
 
     // Telegram WebApp back button
     const tg = (window as any).Telegram?.WebApp
@@ -184,6 +205,64 @@ export default function MatchPage() {
     const interval = setInterval(tick, 1000)
     return () => clearInterval(interval)
   }, [currentMatch?.status, currentMatch?.firstResultAt, currentMatch?.resultScreenshotA, currentMatch?.resultScreenshotB])
+
+  // ── Таймер хода вето (15 сек). По истечении активный клиент инициирует авто-бан. ──
+  useEffect(() => {
+    if (currentMatch?.status !== 'map_veto' || !currentMatch.vetoTurnExpires) { setVetoSecondsLeft(null); return }
+    const expires = new Date(currentMatch.vetoTurnExpires).getTime()
+    let fired = false
+    const tick = async () => {
+      const left = Math.max(0, Math.ceil((expires - Date.now()) / 1000))
+      setVetoSecondsLeft(left)
+      if (left === 0 && !fired) {
+        fired = true
+        // приоритет авто-бана — активному капитану; остальные клиенты как фоллбэк с задержкой
+        const cap = currentMatch.vetoTurn === 'A' ? currentMatch.captainAId : currentMatch.captainBId
+        const mineTurn = user?.id === cap
+        const delay = mineTurn ? 0 : 900
+        setTimeout(() => { api.post(`/matches/${id}/expire-veto`).catch(() => {}) }, delay)
+      }
+    }
+    tick()
+    const interval = setInterval(tick, 250)
+    return () => clearInterval(interval)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentMatch?.status, currentMatch?.vetoTurnExpires, currentMatch?.vetoTurn])
+
+  // ── Детект завершения вето → cinematic-реверс «Матч пройдёт на карте…» ──
+  const prevStatusRef = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    const prev = prevStatusRef.current
+    if (prev === 'map_veto' && currentMatch?.status === 'in_progress' && currentMatch.map) {
+      setRevealMap(currentMatch.map)
+      const t = setTimeout(() => setRevealMap(null), 3600)
+      return () => clearTimeout(t)
+    }
+    prevStatusRef.current = currentMatch?.status
+  }, [currentMatch?.status, currentMatch?.map])
+
+  // ── Таймер 5 мин на публикацию ссылки хостом. Нет ссылки → штраф хосту + отмена. ──
+  useEffect(() => {
+    if (currentMatch?.status !== 'in_progress' || currentMatch.lobbyLink || !currentMatch.startedAt) {
+      setLobbyLinkSecondsLeft(null); return
+    }
+    const started = new Date(currentMatch.startedAt).getTime()
+    const LIMIT_MS = 5 * 60 * 1000
+    let fired = false
+    const tick = () => {
+      const left = Math.max(0, Math.ceil((started + LIMIT_MS - Date.now()) / 1000))
+      setLobbyLinkSecondsLeft(left)
+      if (left === 0 && !fired) {
+        fired = true
+        const delay = currentMatch.hostId === user?.id ? 0 : 900
+        setTimeout(() => { api.post(`/matches/${id}/expire-lobby-link`).catch(() => {}) }, delay)
+      }
+    }
+    tick()
+    const interval = setInterval(tick, 1000)
+    return () => clearInterval(interval)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentMatch?.status, currentMatch?.lobbyLink, currentMatch?.startedAt])
 
   const LOBBY_RE = /^https:\/\/link\.standoff2\.com\/.+\/lobby\/join\/.+/i
 
@@ -283,12 +362,19 @@ export default function MatchPage() {
     : isTeamB
       ? !!currentMatch.resultScreenshotB
       : false
+  // Когда хотя бы один капитан загрузил результат — выйти могут все,
+  // кроме капитана команды, которая ещё не загрузила.
+  const anyResultSubmitted = !!currentMatch.resultScreenshotA || !!currentMatch.resultScreenshotB
+  const pendingCaptainId = (!!currentMatch.resultScreenshotA && !currentMatch.resultScreenshotB) ? currentMatch.captainBId
+    : (!!currentMatch.resultScreenshotB && !currentMatch.resultScreenshotA) ? currentMatch.captainAId : null
+  const iAmPendingCaptain = pendingCaptainId != null && user.id === pendingCaptainId
   const canExit =
     currentMatch.status === 'completed'     ||
     currentMatch.status === 'cancelled'     ||
     currentMatch.status === 'result_pending'||
     currentMatch.status === 'ready_check'   ||  // searching / waiting — always free to leave
-    myTeamSubmitted
+    myTeamSubmitted ||
+    (anyResultSubmitted && !iAmPendingCaptain)
 
   const submitUnlocked = submitUnlockSecondsLeft === 0
   const lobbyLinkReady = !!currentMatch.lobbyLink
@@ -309,6 +395,16 @@ export default function MatchPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#060608', paddingBottom: 32, position: 'relative', overflowX: 'hidden' }}>
+      {/* Cinematic-реверс финальной карты */}
+      <AnimatePresence>
+        {revealMap && <MapReveal map={revealMap} />}
+      </AnimatePresence>
+      {/* Репорт на игрока — не выходя со страницы матча */}
+      <AnimatePresence>
+        {reportTarget && (
+          <ReportModal reportedId={reportTarget.id} reportedName={reportTarget.name} onClose={() => setReportTarget(null)} />
+        )}
+      </AnimatePresence>
       {/* Dynamic map background */}
       <AnimatePresence>
         {hasMapBg && (
@@ -336,47 +432,47 @@ export default function MatchPage() {
       )}
 
       <div style={{ position: 'relative', zIndex: 1, padding: '0 16px' }}>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingTop: 18, marginBottom: 14 }}>
-          {canExit ? (
-            <motion.button whileTap={{ scale: 0.9 }}
-              onClick={async () => {
-                if (currentMatch.status === 'ready_check') await api.post('/matches/lobby/leave').catch(() => {})
-                router.replace('/dashboard')
-              }}
-              style={{
-                background: 'rgba(255,255,255,0.07)', backdropFilter: 'blur(10px)',
-                border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10,
-                padding: '7px 12px', color: '#9CA3AF', fontSize: 12, cursor: 'pointer', fontWeight: 700,
-              }}
-            >← {currentMatch.status === 'ready_check' ? 'Покинуть' : 'Выйти'}</motion.button>
-          ) : (
-            <div style={{
-              background: 'rgba(232,9,46,0.1)', backdropFilter: 'blur(10px)',
-              border: '1px solid rgba(232,9,46,0.25)', borderRadius: 10,
-              padding: '7px 12px', fontSize: 11, color: '#E8092E', fontWeight: 800,
-              display: 'flex', alignItems: 'center', gap: 5,
-            }}>
-              <motion.div animate={{ opacity: [1,0.4,1] }} transition={{ duration: 1.2, repeat: Infinity }}
-                style={{ width: 6, height: 6, borderRadius: '50%', background: '#E8092E' }} />
-              МАТЧ ИДЁТ
-            </div>
-          )}
-          <div style={{ flex: 1, textAlign: 'center' }}>
-            <div style={{ fontSize: 10, color: '#374151', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-              МАТЧ #{currentMatch.id}
-            </div>
+        {/* Header — лаконичный: выход слева, единый статус-чип в центре */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, paddingTop: 18, marginBottom: 16 }}>
+          <div style={{ width: 72, display: 'flex', justifyContent: 'flex-start', flexShrink: 0 }}>
+            {/* На экране поиска (ready_check) кнопка не нужна — внизу есть «Выйти из очереди» */}
+            {currentMatch.status === 'ready_check' ? null : canExit ? (
+              <motion.button whileTap={{ scale: 0.9 }}
+                onClick={() => router.replace('/dashboard')}
+                style={{
+                  background: 'rgba(255,255,255,0.06)', backdropFilter: 'blur(10px)',
+                  border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10,
+                  padding: '7px 10px', color: '#9CA3AF', fontSize: 12, cursor: 'pointer', fontWeight: 700,
+                  display: 'inline-flex', alignItems: 'center', gap: 3, whiteSpace: 'nowrap',
+                }}
+              ><Icon name="chevronLeft" size={13} color="#9CA3AF" />Выйти</motion.button>
+            ) : (
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name="lock" size={15} color="#4B5563" />
+              </div>
+            )}
           </div>
-          <motion.span
-            animate={{ boxShadow: [`0 0 0px ${st.color}`, `0 0 10px ${st.color}60`, `0 0 0px ${st.color}`] }}
-            transition={{ duration: currentMatch.status === 'in_progress' ? 2 : 999, repeat: Infinity }}
-            style={{
-              fontSize: 9, fontWeight: 800, padding: '5px 10px', borderRadius: 20,
-              background: st.bg, color: st.color, textTransform: 'uppercase', letterSpacing: '0.06em',
-              border: `1px solid ${st.color}40`,
-              whiteSpace: 'nowrap', flexShrink: 0, lineHeight: 1,
-            }}
-          >{st.label}</motion.span>
+
+          {/* Единый статус-чип: номер матча + текущая фаза */}
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'center', minWidth: 0 }}>
+            <motion.div
+              animate={currentMatch.status === 'in_progress'
+                ? { boxShadow: [`0 0 0 ${st.color}00`, `0 0 16px ${st.color}55`, `0 0 0 ${st.color}00`] } : {}}
+              transition={{ duration: 2.2, repeat: Infinity }}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 9, padding: '7px 16px', borderRadius: 22,
+                background: `linear-gradient(135deg, ${st.color}22, rgba(15,15,21,0.7))`,
+                border: `1px solid ${st.color}44`, backdropFilter: 'blur(10px)',
+              }}
+            >
+              <motion.div animate={{ opacity: [1, 0.35, 1], scale: [1, 0.85, 1] }} transition={{ duration: 1.4, repeat: Infinity }}
+                style={{ width: 7, height: 7, borderRadius: '50%', background: st.color, boxShadow: `0 0 8px ${st.color}` }} />
+              <span style={{ fontSize: 13, fontWeight: 900, color: '#fff', letterSpacing: '-0.01em' }}>Матч #{currentMatch.id}</span>
+              <span style={{ fontSize: 11, fontWeight: 800, color: st.color, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{st.label}</span>
+            </motion.div>
+          </div>
+
+          <div style={{ width: 84 }} />
         </div>
 
         {/* ── READY CHECK ── */}
@@ -384,30 +480,164 @@ export default function MatchPage() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ marginBottom: 14 }}>
             {!isLobbyFull ? (
               /* Searching */
-              <div style={{ textAlign: 'center', padding: '48px 20px' }}>
-                <motion.div
-                  animate={{ scale: [1, 1.12, 1], opacity: [0.7, 1, 0.7] }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                  style={{ fontSize: 56, marginBottom: 16 }}
-                >⚡</motion.div>
-                <div style={{ fontSize: 20, fontWeight: 900, color: '#fff', marginBottom: 6 }}>Поиск матча</div>
-                <div style={{ fontSize: 13, color: '#4B5563', marginBottom: 20 }}>{filledSlots} / {totalSlots} игроков</div>
-                <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 24 }}>
-                  {allSlotIds.map((slotId, i) => {
-                    const filled = allSlotIds.indexOf(slotId) === i
-                    return (
-                      <motion.div key={i}
-                        animate={filled ? { scale: [1, 1.2, 1], boxShadow: ['0 0 6px rgba(232,9,46,0.4)', '0 0 14px rgba(232,9,46,0.7)', '0 0 6px rgba(232,9,46,0.4)'] } : {}}
-                        transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.2 }}
-                        style={{ width: 14, height: 14, borderRadius: '50%', background: filled ? '#E8092E' : 'rgba(255,255,255,0.08)' }}
+              (() => {
+                const allFilled = [...new Set(allSlotIds)].filter(Boolean)
+                const pct = totalSlots ? (filledSlots / totalSlots) * 100 : 0
+                const renderOrb = (pid: number | undefined, i: number) => (
+                  <div key={i} style={{ width: 52, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                    {pid ? (
+                      <motion.div
+                        initial={{ scale: 0, y: 12, opacity: 0 }}
+                        animate={{ scale: 1, y: 0, opacity: 1 }}
+                        transition={{ type: 'spring', stiffness: 420, damping: 20 }}
+                      >
+                        <motion.div
+                          animate={{ y: [0, -3, 0] }}
+                          transition={{ duration: 2.8, repeat: Infinity, delay: i * 0.18, ease: 'easeInOut' }}
+                          style={{
+                            width: 46, height: 46, borderRadius: '50%', padding: 2,
+                            background: 'linear-gradient(135deg, #E8092E, #ff5a72)',
+                            boxShadow: '0 0 16px rgba(232,9,46,0.5)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          }}
+                        >
+                          <div style={{ width: '100%', height: '100%', borderRadius: '50%', padding: 1.5, background: '#060608' }}>
+                            <Avatar
+                              avatarUrl={players[pid]?.avatarUrl}
+                              name={players[pid]?.gameNickname || '?'}
+                              size={39}
+                              style={{ borderRadius: '50%' }}
+                            />
+                          </div>
+                        </motion.div>
+                      </motion.div>
+                    ) : (
+                      <motion.div
+                        animate={{ opacity: [0.25, 0.55, 0.25], scale: [1, 1.05, 1] }}
+                        transition={{ duration: 1.9, repeat: Infinity, delay: i * 0.22, ease: 'easeInOut' }}
+                        style={{
+                          width: 46, height: 46, borderRadius: '50%',
+                          border: '1.5px dashed rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.03)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}
+                      >
+                        <Icon name="user" size={18} color="rgba(255,255,255,0.2)" />
+                      </motion.div>
+                    )}
+                    <span style={{
+                      fontSize: 9, fontWeight: 600, maxWidth: 52, width: '100%', textAlign: 'center',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      color: pid ? '#9CA3AF' : '#374151',
+                    }}>{pid ? (players[pid]?.gameNickname || '...') : 'поиск'}</span>
+                  </div>
+                )
+
+                return (
+                  <div style={{
+                    minHeight: '64vh', display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', justifyContent: 'center',
+                    padding: '8px 8px 24px', position: 'relative', overflow: 'hidden',
+                  }}>
+                    {/* Ambient glow */}
+                    <div style={{
+                      position: 'absolute', top: '12%', left: '50%', transform: 'translateX(-50%)',
+                      width: 440, height: 440, pointerEvents: 'none', filter: 'blur(10px)',
+                      background: 'radial-gradient(circle, rgba(232,9,46,0.12), transparent 62%)',
+                    }} />
+
+                    {/* ── RADAR ── */}
+                    <div style={{ position: 'relative', width: 230, height: 230, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 28 }}>
+                      {/* Sonar pulses — fade in from 0 and out to 0, so the loop restart is invisible (no flicker) */}
+                      {[0, 1, 2].map(i => (
+                        <motion.div key={`p${i}`}
+                          initial={{ scale: 0.25, opacity: 0 }}
+                          animate={{ scale: [0.25, 0.6, 1], opacity: [0, 0.45, 0] }}
+                          transition={{ duration: 3, repeat: Infinity, delay: i * 1, ease: 'easeOut', times: [0, 0.5, 1] }}
+                          style={{ position: 'absolute', width: 230, height: 230, borderRadius: '50%', border: '1.5px solid rgba(232,9,46,0.4)' }}
+                        />
+                      ))}
+                      {/* Concentric rings */}
+                      {[230, 170, 112].map((d, i) => (
+                        <div key={`r${i}`} style={{ position: 'absolute', width: d, height: d, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.05)' }} />
+                      ))}
+                      {/* Cross grid */}
+                      <div style={{ position: 'absolute', width: 230, height: 1, background: 'rgba(255,255,255,0.04)' }} />
+                      <div style={{ position: 'absolute', width: 1, height: 230, background: 'rgba(255,255,255,0.04)' }} />
+                      {/* Rotating sweep */}
+                      <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 3.5, repeat: Infinity, ease: 'linear' }}
+                        style={{
+                          position: 'absolute', width: 230, height: 230, borderRadius: '50%',
+                          background: 'conic-gradient(from 0deg, transparent 0deg, rgba(232,9,46,0.22) 55deg, rgba(232,9,46,0.03) 75deg, transparent 82deg)',
+                        }}
                       />
-                    )
-                  })}
-                </div>
-                <button onClick={leaveQueue} style={{ background: 'none', border: 'none', color: '#374151', fontSize: 12, cursor: 'pointer' }}>
-                  Выйти из очереди
-                </button>
-              </div>
+                      {/* Center dial */}
+                      <div style={{
+                        position: 'relative', zIndex: 1, width: 112, height: 112, borderRadius: '50%',
+                        background: 'radial-gradient(circle at 50% 32%, rgba(232,9,46,0.2), rgba(6,6,8,0.92))',
+                        border: '1px solid rgba(232,9,46,0.35)',
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                        boxShadow: 'inset 0 0 26px rgba(232,9,46,0.2)',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 2 }}>
+                          <motion.span key={filledSlots}
+                            initial={{ scale: 1.6, color: '#fff' }}
+                            animate={{ scale: 1, color: '#E8092E' }}
+                            transition={{ type: 'spring', stiffness: 300, damping: 16 }}
+                            style={{ fontSize: 42, fontWeight: 900, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}
+                          >{filledSlots}</motion.span>
+                          <span style={{ fontSize: 18, fontWeight: 800, color: '#4B5563' }}>/{totalSlots}</span>
+                        </div>
+                        <div style={{ fontSize: 8, fontWeight: 800, color: '#6B7280', letterSpacing: '0.14em', marginTop: 3, textTransform: 'uppercase' }}>в лобби</div>
+                      </div>
+                    </div>
+
+                    {/* Title */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <span style={{ fontSize: 22, fontWeight: 900, color: '#fff', letterSpacing: '-0.4px' }}>Поиск игроков</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        {[0, 1, 2].map(i => (
+                          <motion.span key={`d${i}`}
+                            animate={{ y: [0, -5, 0], opacity: [0.35, 1, 0.35] }}
+                            transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15, ease: 'easeInOut' }}
+                            style={{ width: 5, height: 5, borderRadius: '50%', background: '#E8092E', display: 'inline-block' }}
+                          />
+                        ))}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 12, color: '#4B5563', marginBottom: 26 }}>Подбираем соперников вашего уровня</div>
+
+                    {/* Player slots */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 10, maxWidth: 320, marginBottom: 26 }}>
+                      {Array.from({ length: totalSlots }).map((_, i) => renderOrb(allFilled[i], i))}
+                    </div>
+
+                    {/* Progress bar */}
+                    <div style={{ width: 'min(280px, 82%)', height: 5, borderRadius: 3, background: 'rgba(255,255,255,0.06)', overflow: 'hidden', marginBottom: 22, position: 'relative' }}>
+                      <motion.div
+                        animate={{ width: `${pct}%` }}
+                        transition={{ type: 'spring', stiffness: 120, damping: 20 }}
+                        style={{ height: '100%', borderRadius: 3, background: 'linear-gradient(90deg, #E8092E, #ff5a72)', boxShadow: '0 0 10px rgba(232,9,46,0.6)' }}
+                      />
+                    </div>
+
+                    {/* Leave */}
+                    <motion.button
+                      whileTap={{ scale: 0.95 }}
+                      onClick={leaveQueue}
+                      style={{
+                        background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+                        borderRadius: 12, padding: '9px 22px', color: '#6B7280',
+                        fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                        display: 'inline-flex', alignItems: 'center', gap: 6,
+                      }}
+                    >
+                      <Icon name="x" size={13} />Выйти из очереди
+                    </motion.button>
+                  </div>
+                )
+              })()
             ) : (
               /* Ready check */
               <div style={{
@@ -451,9 +681,10 @@ export default function MatchPage() {
                           color: isReady ? '#4ADE80' : '#4B5563',
                           border: isReady ? '1px solid rgba(34,197,94,0.3)' : '1px solid rgba(255,255,255,0.07)',
                           boxShadow: isReady ? '0 0 10px rgba(34,197,94,0.2)' : 'none',
+                          display: 'inline-flex', alignItems: 'center', gap: 3,
                         }}
                       >
-                        {isReady ? '✓ ' : ''}{playerName(pid)}
+                        {isReady && <Icon name="check" size={11} />}{playerName(pid)}
                       </motion.span>
                     )
                   })}
@@ -466,12 +697,13 @@ export default function MatchPage() {
                       background: 'linear-gradient(135deg, #E8092E, #9b0a22)',
                       color: '#fff', fontWeight: 900, fontSize: 16, cursor: 'pointer',
                       boxShadow: '0 4px 24px rgba(232,9,46,0.45)',
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                     }}
-                  >✓ Готов</motion.button>
+                  ><Icon name="check" size={18} />Готов</motion.button>
                 ) : (
                   <motion.div initial={{ scale: 0.8 }} animate={{ scale: 1 }}
-                    style={{ color: '#4ADE80', fontWeight: 900, fontSize: 16, padding: '12px 0' }}
-                  >✓ Вы готовы — ждём остальных</motion.div>
+                    style={{ color: '#4ADE80', fontWeight: 900, fontSize: 16, padding: '12px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}
+                  ><Icon name="check" size={17} />Вы готовы — ждём остальных</motion.div>
                 )}
                 <button onClick={leaveQueue} style={{ background: 'none', border: 'none', color: '#374151', fontSize: 11, cursor: 'pointer', marginTop: 10 }}>
                   Выйти из очереди
@@ -496,33 +728,45 @@ export default function MatchPage() {
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               }}>
                 <div>
-                  <div style={{ fontSize: 11, color: isMyVetoTurn ? '#E8092E' : '#4B5563', fontWeight: 700, marginBottom: 2 }}>
-                    {isMyVetoTurn ? '⚔️ ВАШ ХОД — убери карту' : `Ход капитана команды ${currentMatch.vetoTurn}`}
+                  <div style={{ fontSize: 11, color: isMyVetoTurn ? '#E8092E' : '#4B5563', fontWeight: 700, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 5 }}>
+                    {isMyVetoTurn ? <><Icon name="swords" size={12} />ВАШ ХОД — убери карту</> : `Ход капитана команды ${currentMatch.vetoTurn}`}
                   </div>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>
-                    👑 {playerName(currentMatch.vetoTurn === 'A' ? captainA! : captainB!)}
+                  <div style={{ fontSize: 13, fontWeight: 800, color: '#fff', display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <Icon name="crown" size={13} color="#EAB308" /> {playerName(currentMatch.vetoTurn === 'A' ? captainA! : captainB!)}
                     {(currentMatch.vetoTurn === 'A' ? captainA : captainB) === user.id && <span style={{ color: '#E8092E', marginLeft: 4 }}>(вы)</span>}
                   </div>
                 </div>
-                <div style={{
-                  fontSize: 9, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em',
-                  background: currentMatch.vetoTurn === 'A' ? 'rgba(96,165,250,0.15)' : 'rgba(248,113,113,0.15)',
-                  color: currentMatch.vetoTurn === 'A' ? '#60A5FA' : '#F87171',
-                  padding: '4px 10px', borderRadius: 20,
-                  border: `1px solid ${currentMatch.vetoTurn === 'A' ? 'rgba(96,165,250,0.3)' : 'rgba(248,113,113,0.3)'}`,
-                }}>
-                  Команда {currentMatch.vetoTurn}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  {/* 15-секундный таймер хода */}
+                  {vetoSecondsLeft != null && (
+                    <VetoTimer seconds={vetoSecondsLeft} active={isMyVetoTurn} />
+                  )}
+                  <div style={{
+                    fontSize: 9, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em',
+                    background: currentMatch.vetoTurn === 'A' ? 'rgba(96,165,250,0.15)' : 'rgba(248,113,113,0.15)',
+                    color: currentMatch.vetoTurn === 'A' ? '#60A5FA' : '#F87171',
+                    padding: '4px 10px', borderRadius: 20,
+                    border: `1px solid ${currentMatch.vetoTurn === 'A' ? 'rgba(96,165,250,0.3)' : 'rgba(248,113,113,0.3)'}`,
+                  }}>
+                    Команда {currentMatch.vetoTurn}
+                  </div>
                 </div>
               </div>
             </div>
 
             {/* Map grid with cinematic photos */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <AnimatePresence mode="popLayout">
               {currentMatch.availableMaps.map((map, i) => (
                 <motion.button
                   key={map}
+                  layout
                   initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{
+                    opacity: 0, scale: 0.8, rotate: -3,
+                    transition: { duration: 0.4, ease: [0.4, 0, 0.2, 1] },
+                  }}
                   transition={{ delay: i * 0.05, type: 'spring', stiffness: 280, damping: 24 }}
                   whileHover={isMyVetoTurn ? { scale: 1.02 } : {}}
                   whileTap={isMyVetoTurn ? { scale: 0.96 } : {}}
@@ -535,6 +779,12 @@ export default function MatchPage() {
                     outline: isMyVetoTurn ? '1px solid rgba(232,9,46,0.2)' : '1px solid rgba(255,255,255,0.05)',
                   } as any}
                 >
+                  {/* Красная вспышка «бана» при исчезновении */}
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    exit={{ opacity: [0, 0.55, 0], transition: { duration: 0.5 } }}
+                    style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle, rgba(232,9,46,0.7), transparent 70%)', zIndex: 5, pointerEvents: 'none' }}
+                  />
                   {/* Map photo */}
                   <div style={{
                     position: 'absolute', inset: 0,
@@ -569,8 +819,9 @@ export default function MatchPage() {
                         background: '#E8092E', padding: '5px 9px', borderRadius: 8,
                         whiteSpace: 'nowrap', letterSpacing: '0.04em',
                         boxShadow: '0 2px 8px rgba(232,9,46,0.5)',
+                        display: 'inline-flex', alignItems: 'center', gap: 3,
                       }}
-                    >✕ ВЕТО</motion.span>
+                    ><Icon name="x" size={9} />ВЕТО</motion.span>
                   )}
                   {/* Map name — снизу, обрезается многоточием если длинное */}
                   <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '10px 12px' }}>
@@ -585,6 +836,7 @@ export default function MatchPage() {
                   </div>
                 </motion.button>
               ))}
+              </AnimatePresence>
             </div>
           </motion.div>
         )}
@@ -620,17 +872,6 @@ export default function MatchPage() {
                   <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.45)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em' }}>КАРТА МАТЧА</div>
                   <div style={{ fontSize: 30, fontWeight: 900, color: '#fff', letterSpacing: '-0.5px', textShadow: '0 2px 20px rgba(0,0,0,0.9)' }}>{currentMatch.map}</div>
                 </div>
-                {/* Live badge */}
-                <div style={{ position: 'absolute', top: 10, right: 12 }}>
-                  <motion.div
-                    animate={{ opacity: [1, 0.4, 1] }}
-                    transition={{ duration: 1.4, repeat: Infinity }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(34,197,94,0.18)', backdropFilter: 'blur(8px)', border: '1px solid rgba(34,197,94,0.4)', borderRadius: 20, padding: '4px 10px' }}
-                  >
-                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#22C55E', boxShadow: '0 0 8px rgba(34,197,94,1)' }} />
-                    <span style={{ fontSize: 9, fontWeight: 900, color: '#22C55E', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Live</span>
-                  </motion.div>
-                </div>
                 {/* Match ID bottom left */}
                 <div style={{ position: 'absolute', bottom: 10, left: 12, fontSize: 10, color: 'rgba(255,255,255,0.3)', fontWeight: 700 }}>
                   #{currentMatch.id}
@@ -644,7 +885,7 @@ export default function MatchPage() {
               borderRadius: 14, padding: '12px 14px',
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                <span style={{ fontSize: 20 }}>👑</span>
+                <Icon name="crown" size={20} color="#EAB308" />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 11, color: 'rgba(234,179,8,0.7)', fontWeight: 700, marginBottom: 2 }}>
                     ХОСТ ЛОББИ В ИГРЕ
@@ -664,7 +905,7 @@ export default function MatchPage() {
               {hostId === user.id ? (
                 (currentMatch.lobbyLink && !lobbyEditing) ? (
                   <div>
-                    <div style={{ fontSize: 11, color: 'rgba(234,179,8,0.6)', marginBottom: 6 }}>🔗 Ссылка опубликована:</div>
+                    <div style={{ fontSize: 11, color: 'rgba(234,179,8,0.6)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}><Icon name="link" size={12} />Ссылка опубликована:</div>
                     <div style={{
                       background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.25)',
                       borderRadius: 8, padding: '8px 10px', fontSize: 12,
@@ -675,9 +916,9 @@ export default function MatchPage() {
                     {!(currentMatch as any).lobbyLinkChanged ? (
                       <button
                         onClick={() => { setLobbyLinkInput(currentMatch.lobbyLink || ''); setLobbyEditing(true) }}
-                        style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 11, cursor: 'pointer', padding: 0 }}
+                        style={{ background: 'none', border: 'none', color: '#9CA3AF', fontSize: 11, cursor: 'pointer', padding: 0, display: 'inline-flex', alignItems: 'center', gap: 5 }}
                       >
-                        ✏️ Изменить ссылку (можно один раз)
+                        <Icon name="pencil" size={11} />Изменить ссылку (можно один раз)
                       </button>
                     ) : (
                       <span style={{ color: '#374151', fontSize: 11 }}>Ссылку уже меняли (изменение доступно один раз)</span>
@@ -685,8 +926,24 @@ export default function MatchPage() {
                   </div>
                 ) : (
                   <div>
-                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 6 }}>
-                      {lobbyEditing ? '✏️ Новая ссылка на лобби (таймер и список зашедших сбросятся):' : '📋 Вставьте ссылку на лобби:'}
+                    {/* Таймер 5 минут на публикацию ссылки */}
+                    {!lobbyEditing && lobbyLinkSecondsLeft != null && (
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10, padding: '9px 12px', borderRadius: 11,
+                        background: lobbyLinkSecondsLeft <= 60 ? 'rgba(232,9,46,0.12)' : 'rgba(234,179,8,0.08)',
+                        border: `1px solid ${lobbyLinkSecondsLeft <= 60 ? 'rgba(232,9,46,0.4)' : 'rgba(234,179,8,0.3)'}`,
+                      }}>
+                        <Icon name="hourglass" size={14} color={lobbyLinkSecondsLeft <= 60 ? '#E8092E' : '#EAB308'} />
+                        <span style={{ flex: 1, fontSize: 12, color: '#D1D5DB', fontWeight: 600 }}>
+                          {lobbyLinkSecondsLeft <= 60 ? 'Опубликуйте ссылку, иначе бан и отмена матча' : 'Время на публикацию ссылки'}
+                        </span>
+                        <span style={{ fontSize: 15, fontWeight: 900, fontVariantNumeric: 'tabular-nums', color: lobbyLinkSecondsLeft <= 60 ? '#E8092E' : '#EAB308' }}>
+                          {Math.floor(lobbyLinkSecondsLeft / 60)}:{String(lobbyLinkSecondsLeft % 60).padStart(2, '0')}
+                        </span>
+                      </div>
+                    )}
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+                      {lobbyEditing ? <><Icon name="pencil" size={11} />Новая ссылка на лобби (таймер и список зашедших сбросятся):</> : <><Icon name="clipboard" size={11} />Вставьте ссылку на лобби:</>}
                     </div>
                     <div style={{ display: 'flex', gap: 6 }}>
                       <input
@@ -723,8 +980,8 @@ export default function MatchPage() {
               ) : (
                 currentMatch.lobbyLink ? (
                   <div>
-                    <div style={{ fontSize: 11, color: 'rgba(234,179,8,0.6)', marginBottom: 6 }}>
-                      🔗 Ссылка на лобби:
+                    <div style={{ fontSize: 11, color: 'rgba(234,179,8,0.6)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <Icon name="link" size={12} />Ссылка на лобби:
                     </div>
                     <a
                       href={currentMatch.lobbyLink}
@@ -738,9 +995,10 @@ export default function MatchPage() {
                         border: '1px solid rgba(234,179,8,0.3)', borderRadius: 8,
                         padding: '10px 12px', color: '#EAB308', fontWeight: 700,
                         fontSize: 13, textAlign: 'center', textDecoration: 'none',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
                       }}
                     >
-                      🎮 Войти в лобби →
+                      <Icon name="gamepad" size={15} />Войти в лобби <Icon name="chevronRight" size={14} />
                     </a>
                     {/* Join status + countdown */}
                     {(() => {
@@ -757,8 +1015,8 @@ export default function MatchPage() {
                       return (
                         <div style={{ marginTop: 8 }}>
                           {timeLeft !== null && timeLeft > 0 && (
-                            <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 6, textAlign: 'center' }}>
-                              ⏱ Время на переход: <b style={{ color: notJoined.length > 0 ? '#F59E0B' : '#22C55E' }}>
+                            <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                              <Icon name="timer" size={12} />Время на переход: <b style={{ color: notJoined.length > 0 ? '#F59E0B' : '#22C55E' }}>
                                 {mins}:{String(secs).padStart(2, '0')}
                               </b>
                             </div>
@@ -770,8 +1028,9 @@ export default function MatchPage() {
                                 background: joined.includes(pid) ? 'rgba(34,197,94,0.15)' : 'rgba(245,158,11,0.12)',
                                 color: joined.includes(pid) ? '#22C55E' : '#F59E0B',
                                 border: `1px solid ${joined.includes(pid) ? 'rgba(34,197,94,0.3)' : 'rgba(245,158,11,0.25)'}`,
+                                display: 'inline-flex', alignItems: 'center', gap: 3,
                               }}>
-                                {joined.includes(pid) ? '✓ ' : '⏳ '}{playerName(pid)}
+                                {joined.includes(pid) ? <Icon name="check" size={10} /> : <Icon name="hourglass" size={10} />}{playerName(pid)}
                               </span>
                             ))}
                           </div>
@@ -780,23 +1039,30 @@ export default function MatchPage() {
                     })()}
                   </div>
                 ) : (
-                  <div style={{ fontSize: 12, color: '#374151', textAlign: 'center', paddingTop: 4 }}>
-                    ⏳ Хост ещё не опубликовал ссылку...
+                  <div style={{ paddingTop: 4, textAlign: 'center' }}>
+                    <div style={{ fontSize: 12, color: '#374151', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                      <Icon name="hourglass" size={13} />Хост публикует ссылку на лобби…
+                    </div>
+                    {lobbyLinkSecondsLeft != null && (
+                      <div style={{ marginTop: 6, fontSize: 13, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: lobbyLinkSecondsLeft <= 60 ? '#E8092E' : '#9CA3AF' }}>
+                        {Math.floor(lobbyLinkSecondsLeft / 60)}:{String(lobbyLinkSecondsLeft % 60).padStart(2, '0')}
+                      </div>
+                    )}
                   </div>
                 )
               )}
             </div>
 
-            {/* My side badge + Discord */}
-            {(mySide || currentMatch.voiceInviteT || currentMatch.voiceInviteCT) && (
+            {/* My side badge + Discord (голосовой чат скрыт в клановых матчах) */}
+            {!(currentMatch as any).isClanMatch && (mySide || currentMatch.voiceInviteT || currentMatch.voiceInviteCT) && (
               <div style={{
                 background: mySide === 'T' ? 'rgba(234,179,8,0.07)' : 'rgba(59,130,246,0.07)',
                 border: mySide === 'T' ? '1px solid rgba(234,179,8,0.25)' : '1px solid rgba(59,130,246,0.25)',
                 borderRadius: 14, padding: '12px 14px',
               }}>
                 <div style={{ textAlign: 'center', marginBottom: 10 }}>
-                  <span style={{ fontWeight: 800, fontSize: 15, color: mySide === 'T' ? '#EAB308' : '#60A5FA' }}>
-                    {mySide === 'T' ? '💣 Ваша команда — Террористы' : '🛡️ Ваша команда — Спецназ'}
+                  <span style={{ fontWeight: 800, fontSize: 15, color: mySide === 'T' ? '#EAB308' : '#60A5FA', display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+                    {mySide === 'T' ? <><Icon name="terrorist" size={15} />Ваша команда — Террористы</> : <><Icon name="shield" size={15} />Ваша команда — Спецназ</>}
                   </span>
                 </div>
                 {(() => {
@@ -820,7 +1086,7 @@ export default function MatchPage() {
                         cursor: 'default', userSelect: 'none', opacity: 0.7,
                       }}
                     >
-                      🔒 Discord не привязан — голосовой чат недоступен
+                      <Icon name="lock" size={13} />Discord не привязан — голосовой чат недоступен
                     </div>
                   )
 
@@ -841,71 +1107,106 @@ export default function MatchPage() {
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/>
                       </svg>
-                      🎙️ Войти в голосовой чат →
+                      <Icon name="mic" size={15} />Войти в голосовой чат <Icon name="chevronRight" size={14} />
                     </a>
                   ) : (
-                    <div style={{ textAlign: 'center', fontSize: 12, color: '#374151' }}>⏳ Голосовой чат создаётся...</div>
+                    <div style={{ fontSize: 12, color: '#374151', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}><Icon name="hourglass" size={13} />Голосовой чат создаётся...</div>
                   )
                 })()}
               </div>
             )}
 
-            {/* Teams — side by side */}
-            <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+            {/* Teams — составы с аватарами, рангами и ELO */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {[
-                { ids: currentMatch.teamAIds, cap: captainA, side: teamASide, isMe: isTeamA, label: 'A', color: '#60A5FA', bg: 'rgba(59,130,246,0.08)', border: 'rgba(59,130,246,0.2)' },
-                { ids: currentMatch.teamBIds, cap: captainB, side: teamBSide, isMe: isTeamB, label: 'B', color: '#F87171', bg: 'rgba(232,9,46,0.08)', border: 'rgba(232,9,46,0.2)' },
+                { ids: currentMatch.teamAIds, cap: captainA, side: teamASide, isMe: isTeamA, label: 'Команда A', accent: '#60A5FA', elo: currentMatch.teamAElo },
+                { ids: currentMatch.teamBIds, cap: captainB, side: teamBSide, isMe: isTeamB, label: 'Команда B', accent: '#F87171', elo: currentMatch.teamBElo },
               ].map((team, ti) => (
                 <div key={ti} style={{
-                  flex: 1, minWidth: 0,
-                  background: team.bg, borderRadius: 14,
-                  border: `1px solid ${team.border}`, padding: '10px 12px',
+                  background: `linear-gradient(180deg, ${team.accent}14, rgba(15,15,21,0.6))`,
+                  borderRadius: 18, border: `1px solid ${team.accent}33`, overflow: 'hidden',
                 }}>
                   {/* Header */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 9, color: team.color, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
-                      {team.label}{team.isMe ? ' · ВЫ' : ''}
-                    </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 14px', borderBottom: `1px solid ${team.accent}1f` }}>
+                    <span style={{ fontSize: 13, fontWeight: 900, color: team.accent, letterSpacing: '-0.01em' }}>{team.label}</span>
+                    {team.isMe && <span style={{ fontSize: 9, fontWeight: 900, color: '#fff', background: team.accent, padding: '2px 7px', borderRadius: 6, letterSpacing: '0.04em' }}>ВЫ</span>}
                     {team.side && (
-                      <span style={{
-                        fontSize: 9, fontWeight: 900, padding: '1px 5px', borderRadius: 6,
+                      <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 800, padding: '3px 9px', borderRadius: 7,
                         background: team.side === 'T' ? 'rgba(234,179,8,0.15)' : 'rgba(59,130,246,0.15)',
                         color: team.side === 'T' ? '#EAB308' : '#60A5FA',
                         border: `1px solid ${team.side === 'T' ? 'rgba(234,179,8,0.3)' : 'rgba(59,130,246,0.3)'}`,
-                        whiteSpace: 'nowrap',
-                      }}>
-                        {team.side === 'T' ? '💣T' : '🛡CT'}
+                        display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        {team.side === 'T' ? <><Icon name="terrorist" size={11} />Террористы</> : <><Icon name="shield" size={11} />Спецназ</>}
                       </span>
                     )}
+                    <span style={{ marginLeft: team.side ? 0 : 'auto', fontSize: 10, color: '#6B7280', fontWeight: 700, whiteSpace: 'nowrap' }}>ср. {team.elo}</span>
                   </div>
                   {/* Players */}
-                  {team.ids.map((pid) => (
-                    <div key={pid} style={{
-                      fontSize: 12, padding: '4px 0',
-                      borderBottom: '1px solid rgba(255,255,255,0.04)',
-                      color: pid === user.id ? '#fff' : '#6B7280',
-                      fontWeight: pid === user.id ? 800 : 500,
-                      display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden',
-                    }}>
-                      {pid === team.cap && <span style={{ fontSize: 9, flexShrink: 0 }}>👑</span>}
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {playerName(pid)}
-                      </span>
-                    </div>
-                  ))}
+                  <div style={{ padding: '6px 8px' }}>
+                    {team.ids.map((pid) => {
+                      const p = players[pid]
+                      const elo = p?.elo ?? 1000
+                      const rank = getEloRank(elo)
+                      const isMe = pid === user.id
+                      const isCap = pid === team.cap
+                      return (
+                        <div key={pid} style={{
+                          display: 'flex', alignItems: 'center', gap: 11, padding: '8px 8px', borderRadius: 12,
+                          background: isMe ? 'rgba(255,255,255,0.04)' : 'transparent',
+                        }}>
+                          {/* Avatar в ранг-цветном кольце */}
+                          <div style={{ width: 44, height: 44, borderRadius: '50%', padding: 2, flexShrink: 0, background: `linear-gradient(135deg, ${rank.color}, ${rank.color}66)`, boxShadow: `0 0 10px ${rank.color}55` }}>
+                            <div style={{ width: '100%', height: '100%', borderRadius: '50%', padding: 1.5, background: '#0a0a0f' }}>
+                              <Avatar avatarUrl={p?.avatarUrl} name={p?.gameNickname || '?'} size={37} style={{ borderRadius: '50%' }} />
+                            </div>
+                          </div>
+                          {/* Nick + rank */}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                              {isCap && <Icon name="crown" size={13} color="#EAB308" />}
+                              <span style={{ fontSize: 14, fontWeight: isMe ? 800 : 700, color: isMe ? '#fff' : '#D1D5DB', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140 }}>
+                                {p?.gameNickname || `Игрок ${pid}`}
+                              </span>
+                              {p?.isVerified && <Icon name="verified" size={13} color="#60A5FA" />}
+                            </div>
+                            <div style={{ fontSize: 11, color: rank.color, fontWeight: 700, marginTop: 1 }}>
+                              {rank.label} · {elo} ELO
+                            </div>
+                          </div>
+                          {/* Ранг-эмблема (наша jpg-иконка) */}
+                          <div style={{ flexShrink: 0 }}>
+                            <EloRing elo={elo} size={38} showLabel={false} />
+                          </div>
+                          {/* Report (не себя) */}
+                          {!isMe && (
+                            <button onClick={() => setReportTarget({ id: pid, name: p?.gameNickname || `Игрок ${pid}` })}
+                              style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 9, border: '1px solid rgba(239,68,68,0.25)', background: 'rgba(239,68,68,0.1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                              title="Пожаловаться">
+                              <Icon name="warning" size={15} color="#EF4444" />
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
               ))}
             </div>
 
+            {/* Прак: вместо загрузки результата — кнопка выхода (разблок через 5 мин) */}
+            {myTeam && (currentMatch as any).clanMode === 'prac' && (
+              <PracExit match={currentMatch} />
+            )}
+
             {/* Result submission */}
-            {myTeam && (
+            {myTeam && (currentMatch as any).clanMode !== 'prac' && (
               <div style={{
                 ...cardStyle,
                 border: '1px solid rgba(234,179,8,0.18)',
                 background: 'rgba(234,179,8,0.04)',
               }}>
-                <h3 style={{ fontWeight: 800, fontSize: 14, marginBottom: 12, color: '#fff' }}>
-                  📸 Результат — Команда {myTeam}
+                <h3 style={{ fontWeight: 800, fontSize: 14, marginBottom: 12, color: '#fff', display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <Icon name="camera" size={15} />Результат — Команда {myTeam}
                 </h3>
 
                 {/* Warning: other captain submitted */}
@@ -921,7 +1222,7 @@ export default function MatchPage() {
                       borderRadius: 10, padding: '10px 12px', marginBottom: 12,
                       display: 'flex', alignItems: 'center', gap: 10,
                     }}>
-                      <span style={{ fontSize: 22 }}>⚠️</span>
+                      <Icon name="warning" size={22} color="#F87171" />
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 700, fontSize: 13, color: '#F87171' }}>
                           Капитан другой команды уже загрузил результат!
@@ -943,7 +1244,7 @@ export default function MatchPage() {
 
                 {submitted || alreadySubmitted ? (
                   <div style={{ textAlign: 'center', padding: '16px 0' }}>
-                    <div style={{ fontSize: 32, marginBottom: 8 }}>✅</div>
+                    <div style={{ marginBottom: 8, color: '#4ADE80', display: 'flex', justifyContent: 'center' }}><Icon name="check-circle" size={32} /></div>
                     <p style={{ color: '#4ADE80', fontWeight: 800, fontSize: 14, margin: '0 0 4px' }}>Результат отправлен</p>
                     <p style={{ color: '#4B5563', fontSize: 12, margin: 0 }}>
                       {currentMatch.resultScreenshotA && currentMatch.resultScreenshotB
@@ -953,7 +1254,7 @@ export default function MatchPage() {
                   </div>
                 ) : !iAmCaptain ? (
                   <div style={{ textAlign: 'center', padding: '16px 0' }}>
-                    <div style={{ fontSize: 28, marginBottom: 8 }}>👑</div>
+                    <div style={{ marginBottom: 8, color: '#EAB308', display: 'flex', justifyContent: 'center' }}><Icon name="crown" size={28} /></div>
                     <p style={{ fontWeight: 700, fontSize: 13, color: '#9CA3AF', margin: '0 0 4px' }}>Загрузить результат может только капитан</p>
                     <p style={{ fontSize: 11, color: '#374151', margin: 0 }}>
                       Капитан вашей команды: <span style={{ color: '#fff' }}>{myCaptainId ? playerName(myCaptainId) : '—'}</span>
@@ -961,7 +1262,7 @@ export default function MatchPage() {
                   </div>
                 ) : !lobbyLinkReady ? (
                   <div style={{ textAlign: 'center', padding: '16px 0' }}>
-                    <div style={{ fontSize: 28, marginBottom: 8 }}>🔗</div>
+                    <div style={{ marginBottom: 8, color: '#EAB308', display: 'flex', justifyContent: 'center' }}><Icon name="link" size={28} /></div>
                     <p style={{ fontWeight: 700, fontSize: 13, color: '#9CA3AF', margin: '0 0 4px' }}>Дождитесь ссылки от хоста</p>
                     <p style={{ fontSize: 11, color: '#374151', margin: 0 }}>Хост должен опубликовать ссылку на лобби</p>
                   </div>
@@ -1021,10 +1322,10 @@ export default function MatchPage() {
                           style={{
                             position: 'absolute', top: 8, right: 8, width: 28, height: 28,
                             borderRadius: '50%', background: 'rgba(0,0,0,0.7)', border: 'none',
-                            color: '#fff', fontSize: 14, cursor: 'pointer',
+                            color: '#fff', cursor: 'pointer',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                           }}
-                        >×</button>
+                        ><Icon name="x" size={13} /></button>
                       </div>
                     ) : (
                       <button
@@ -1037,7 +1338,7 @@ export default function MatchPage() {
                           cursor: 'pointer', transition: 'border 0.2s',
                         }}
                       >
-                        <span style={{ fontSize: 30 }}>📸</span>
+                        <Icon name="camera" size={30} color="#4B5563" />
                         <span style={{ fontSize: 13, color: '#4B5563' }}>Нажмите чтобы загрузить скриншот</span>
                         <span style={{ fontSize: 11, color: '#374151' }}>с результатами матча</span>
                       </button>
@@ -1056,7 +1357,7 @@ export default function MatchPage() {
                         transition: 'all 0.2s',
                       }}
                     >
-                      {submitting ? 'Отправка...' : '📤 Отправить результат'}
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>{submitting ? 'Отправка...' : <><Icon name="upload" size={15} />Отправить результат</>}</span>
                     </button>
                   </>
                 )}
@@ -1084,7 +1385,7 @@ export default function MatchPage() {
               {currentMatch.isDisputed ? (
                 <>
                   <motion.div animate={{ rotate: [-5, 5, -5] }} transition={{ duration: 0.5, repeat: 3, delay: 0.3 }}
-                    style={{ fontSize: 42, marginBottom: 10 }}>⚠️</motion.div>
+                    style={{ marginBottom: 10, color: '#EF4444', display: 'flex', justifyContent: 'center' }}><Icon name="warning" size={42} /></motion.div>
                   <div style={{ fontSize: 18, fontWeight: 900, color: '#EF4444', marginBottom: 6 }}>Спорный результат</div>
                   <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 16 }}>Капитаны указали разные счёта — администратор разберётся</div>
                   <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
@@ -1105,7 +1406,7 @@ export default function MatchPage() {
               ) : (
                 <>
                   <motion.div animate={{ rotate: 360 }} transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
-                    style={{ fontSize: 44, marginBottom: 14, display: 'inline-block' }}>⏳</motion.div>
+                    style={{ marginBottom: 14, display: 'inline-flex', color: '#60A5FA' }}><Icon name="hourglass" size={42} /></motion.div>
                   <div style={{ fontSize: 18, fontWeight: 900, color: '#fff', marginBottom: 6 }}>На проверке</div>
                   <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 16 }}>Оба капитана сдали результат</div>
                   <div style={{
@@ -1153,9 +1454,9 @@ export default function MatchPage() {
                   initial={{ scale: 0, rotate: -20 }}
                   animate={{ scale: 1, rotate: 0 }}
                   transition={{ type: 'spring', stiffness: 300, damping: 18, delay: 0.1 }}
-                  style={{ fontSize: 64, marginBottom: 12, filter: `drop-shadow(0 0 20px ${accentGlow})` }}
+                  style={{ marginBottom: 12, filter: `drop-shadow(0 0 20px ${accentGlow})`, color: accentColor, display: 'flex', justifyContent: 'center' }}
                 >
-                  {isWin ? '🏆' : isDraw ? '🤝' : '💀'}
+                  <Icon name={isWin ? 'trophy' : isDraw ? 'handshake' : 'skull'} size={60} strokeWidth={1.6} />
                 </motion.div>
 
                 <motion.div
@@ -1208,5 +1509,125 @@ export default function MatchPage() {
         })()}
       </div>
     </div>
+  )
+}
+
+// Прак: кнопка выхода, разблокируется через 5 минут после старта. Результат не сохраняется.
+function PracExit({ match }: { match: any }) {
+  const router = useRouter()
+  const [now, setNow] = useState(Date.now())
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t) }, [])
+  const startedAt = match.startedAt ? new Date(match.startedAt).getTime() : Date.now()
+  const left = Math.max(0, 5 * 60 * 1000 - (now - startedAt))
+  const unlocked = left <= 0
+  const mm = Math.floor(left / 60000), ss = Math.floor((left % 60000) / 1000)
+
+  const exit = async () => {
+    setBusy(true)
+    try { await api.post(`/matches/${match.id}/leave-prac`) } catch {}
+    router.push('/dashboard')
+  }
+  return (
+    <div style={{ ...cardStyle, border: '1px solid rgba(168,85,247,0.2)', background: 'rgba(168,85,247,0.05)', textAlign: 'center' }}>
+      <h3 style={{ fontWeight: 800, fontSize: 14, marginBottom: 6, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+        <Icon name="swords" size={15} color="#A855F7" />Тренировочный матч (прак)
+      </h3>
+      <p style={{ fontSize: 12, color: '#9CA3AF', margin: '0 0 12px' }}>Результаты прака не сохраняются и не влияют на рейтинг.</p>
+      <button onClick={exit} disabled={!unlocked || busy}
+        style={{ width: '100%', padding: '13px 0', borderRadius: 12, border: 'none', cursor: unlocked ? 'pointer' : 'not-allowed', fontSize: 15, fontWeight: 800, color: '#fff', background: unlocked ? 'linear-gradient(135deg, #A855F7, #E8092E)' : 'rgba(255,255,255,0.06)', opacity: unlocked ? 1 : 0.6 }}>
+        {busy ? '…' : unlocked ? 'Выйти из прака' : `Выход через ${mm}:${String(ss).padStart(2, '0')}`}
+      </button>
+    </div>
+  )
+}
+
+// 15-секундный круговой таймер хода вето
+function VetoTimer({ seconds, active }: { seconds: number; active: boolean }) {
+  const pct = Math.max(0, Math.min(1, seconds / 15))
+  const SIZE = 38, R = 15, C = 2 * Math.PI * R
+  const urgent = seconds <= 5
+  const color = urgent ? '#E8092E' : active ? '#22C55E' : '#EAB308'
+  const c2 = urgent ? '#ff5a72' : active ? '#4ADE80' : '#FACC15'
+  const gid = `vt-${active ? 'a' : 'i'}-${urgent ? 'u' : 'n'}`
+  return (
+    <div style={{ position: 'relative', width: SIZE, height: SIZE, flexShrink: 0 }}>
+      {/* мягкое свечение позади (пульсирует мягко) */}
+      <motion.div
+        animate={{ opacity: urgent ? [0.45, 0.85, 0.45] : [0.25, 0.45, 0.25], scale: urgent ? [1, 1.12, 1] : 1 }}
+        transition={{ duration: urgent ? 0.9 : 2.4, repeat: Infinity, ease: 'easeInOut' }}
+        style={{ position: 'absolute', inset: -5, borderRadius: '50%', background: `radial-gradient(circle, ${color}80, transparent 68%)`, filter: 'blur(3px)', pointerEvents: 'none' }}
+      />
+      {/* стеклянная подложка */}
+      <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'rgba(8,8,12,0.65)', border: `1px solid ${color}40`, boxShadow: `inset 0 0 8px ${color}30` }} />
+      <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} style={{ transform: 'rotate(-90deg)', position: 'relative' }}>
+        <defs>
+          <linearGradient id={gid} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor={c2} />
+            <stop offset="100%" stopColor={color} />
+          </linearGradient>
+        </defs>
+        <circle cx={SIZE / 2} cy={SIZE / 2} r={R} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="3.5" />
+        <motion.circle
+          cx={SIZE / 2} cy={SIZE / 2} r={R} fill="none" stroke={`url(#${gid})`} strokeWidth="3.5" strokeLinecap="round"
+          strokeDasharray={C} animate={{ strokeDashoffset: C * (1 - pct) }} transition={{ duration: 0.3, ease: 'linear' }}
+        />
+      </svg>
+      <motion.div
+        animate={urgent ? { scale: [1, 1.16, 1] } : { scale: 1 }}
+        transition={urgent ? { duration: 0.6, repeat: Infinity, ease: 'easeInOut' } : {}}
+        style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 900, color: '#fff', textShadow: `0 0 6px ${color}, 0 1px 2px rgba(0,0,0,0.6)`, fontVariantNumeric: 'tabular-nums' }}
+      >
+        {seconds}
+      </motion.div>
+    </div>
+  )
+}
+
+// Кинематографичный реверс выбранной карты «Матч пройдёт на карте…»
+function MapReveal({ map }: { map: string }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.5 } }}
+      style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: '#060608' }}
+    >
+      {/* Фото карты с зумом */}
+      <motion.div
+        initial={{ scale: 1.35, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: 1.6, ease: [0.16, 1, 0.3, 1] }}
+        style={{ position: 'absolute', inset: 0, backgroundImage: `url(${mapImgUrl(map)})`, backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(0.45) saturate(1.25)' }}
+      />
+      <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at center, rgba(6,6,8,0.25) 0%, rgba(6,6,8,0.85) 75%)' }} />
+      {/* Световой свип */}
+      <motion.div
+        initial={{ x: '-120%' }} animate={{ x: '220%' }} transition={{ duration: 1.4, ease: 'easeInOut', delay: 0.4 }}
+        style={{ position: 'absolute', top: 0, bottom: 0, width: '35%', background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent)', pointerEvents: 'none' }}
+      />
+      <div style={{ position: 'relative', textAlign: 'center', padding: 24 }}>
+        <motion.div
+          initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5, duration: 0.6 }}
+          style={{ fontSize: 13, fontWeight: 800, letterSpacing: '0.25em', textTransform: 'uppercase', color: '#9CA3AF', marginBottom: 14 }}
+        >
+          Матч пройдёт на карте
+        </motion.div>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.78 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.55, type: 'spring', stiffness: 200, damping: 18 }}
+          style={{ fontSize: 52, fontWeight: 900, letterSpacing: '-0.02em', color: '#fff', textShadow: '0 4px 30px rgba(232,9,46,0.6)', lineHeight: 1 }}
+        >
+          {map}
+        </motion.div>
+        <motion.div
+          initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ delay: 1.0, duration: 0.7, ease: 'easeOut' }}
+          style={{ height: 3, width: 160, margin: '18px auto 0', borderRadius: 2, background: 'linear-gradient(90deg, transparent, #E8092E, transparent)', transformOrigin: 'center' }}
+        />
+        <motion.div
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.3, duration: 0.5 }}
+          style={{ marginTop: 20, fontSize: 12, color: '#6B7280', fontWeight: 600 }}
+        >
+          Переход на матч…
+        </motion.div>
+      </div>
+    </motion.div>
   )
 }

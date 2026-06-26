@@ -11,8 +11,6 @@ interface UserProfile {
   displayName: string
   elo: number
   coins: number
-  xp: number
-  level: number
   matchesPlayed: number
   matchesWon: number
   matchesLost: number
@@ -27,6 +25,11 @@ interface UserProfile {
   isPremium: boolean
   isAdmin: boolean
   isModerator: boolean
+  isVerified: boolean
+  isDmHost?: boolean
+  cplAccess?: boolean
+  cplqAccess?: boolean
+  cplqDanger?: boolean
   warns: number
   cooldownUntil: string | null
   isBanned: boolean
@@ -36,8 +39,8 @@ interface UserProfile {
   region: string | null
   regionUpdatedAt: string | null
   miniGamePlaysToday: number
-  loginStreak: number
   isRegistered: boolean
+  inviteRedeemed: boolean
   gameNickname: string | null
   gameId: string | null
   nicknameChangesUsed: number
@@ -49,6 +52,8 @@ interface AuthState {
   isAuthenticated: boolean
   isLoading: boolean
   login: (initData: string | null, devTelegramId?: number) => Promise<void>
+  webLogin: (accessToken: string) => Promise<any>
+  hydrateFromToken: () => Promise<boolean>
   logout: () => void
   refreshUser: () => Promise<void>
 }
@@ -80,6 +85,35 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch (err) {
       set({ isLoading: false })
       throw err
+    }
+  },
+
+  // Веб-вход: получили JWT (через код привязки или Telegram-виджет) → грузим профиль.
+  webLogin: async (accessToken: string) => {
+    set({ isLoading: true })
+    try {
+      localStorage.setItem('condr_faceit_token', accessToken)
+      const profileRes = await api.get('/users/me', { headers: { Authorization: `Bearer ${accessToken}` } })
+      set({ user: profileRes.data, isAuthenticated: true, isLoading: false })
+      return profileRes.data
+    } catch (err) {
+      set({ isLoading: false })
+      throw err
+    }
+  },
+
+  // Сайт: восстановить сессию из сохранённого токена (без Telegram).
+  hydrateFromToken: async () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('condr_faceit_token') : null
+    if (!token) { set({ isLoading: false }); return false }
+    try {
+      const res = await api.get('/users/me')
+      set({ user: res.data, isAuthenticated: true, isLoading: false })
+      return true
+    } catch {
+      localStorage.removeItem('condr_faceit_token')
+      set({ user: null, isAuthenticated: false, isLoading: false })
+      return false
     }
   },
 

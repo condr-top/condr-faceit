@@ -2,32 +2,39 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Or, In } from 'typeorm';
 import { User } from './entities/user.entity';
-import { DailyReward } from './entities/daily-reward.entity';
 import { Friendship, FriendshipStatus } from './entities/friendship.entity';
 import { MatchPlayer } from '../matches/entities/match-player.entity';
 import { Match, MatchStatus } from '../matches/entities/match.entity';
 import { EloHistory } from './entities/elo-history.entity';
-
-const DAILY_REWARDS = [
-  { coins: 50, xp: 100 },
-  { coins: 75, xp: 150 },
-  { coins: 100, xp: 200 },
-  { coins: 125, xp: 250 },
-  { coins: 150, xp: 300 },
-  { coins: 200, xp: 400 },
-  { coins: 300, xp: 500 },
-];
+import { AppGateway } from '../gateway/app.gateway';
+import { InviteService } from '../invite/invite.service';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectRepository(User) private userRepo: Repository<User>,
-    @InjectRepository(DailyReward) private rewardRepo: Repository<DailyReward>,
     @InjectRepository(Friendship) private friendshipRepo: Repository<Friendship>,
     @InjectRepository(MatchPlayer) private playerRepo: Repository<MatchPlayer>,
     @InjectRepository(Match) private matchRepo: Repository<Match>,
     @InjectRepository(EloHistory) private eloHistoryRepo: Repository<EloHistory>,
+    private gateway: AppGateway,
+    private inviteService: InviteService,
   ) {}
+
+  /** Шаг 1 регистрации: ввод пригласительного кода. Списывает код (один код = один человек). */
+  async redeemInvite(userId: number, code: string): Promise<{ ok: true }> {
+    const user = await this.findById(userId);
+    if (user.isRegistered || user.inviteRedeemed) return { ok: true }; // гейт уже пройден
+    await this.inviteService.redeem(code, userId); // бросит ошибку, если код неверный/использован
+    user.inviteRedeemed = true;
+    await this.userRepo.save(user);
+    return { ok: true };
+  }
+
+  /** Добавляет к списку игроков флаг online (есть активный сокет). */
+  private withOnline<T extends { id: number }>(users: T[]): (T & { online: boolean })[] {
+    return users.map((u) => ({ ...u, online: this.gateway.isUserOnline(u.id) }));
+  }
 
   /** Call this after every elo change before saving the user */
   async logEloChange(userId: number, eloBefore: number, eloAfter: number, reason: string) {
@@ -46,55 +53,6 @@ export class UsersService {
 
   async findByTelegramId(telegramId: number): Promise<User | null> {
     return this.userRepo.findOne({ where: { telegramId } });
-  }
-
-  async claimDailyReward(userId: number): Promise<{ coins: number; xp: number; streak: number; alreadyClaimed: boolean }> {
-    const user = await this.findById(userId);
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-    if (user.lastLoginReward) {
-      const lastRewardDay = new Date(
-        user.lastLoginReward.getFullYear(),
-        user.lastLoginReward.getMonth(),
-        user.lastLoginReward.getDate(),
-      );
-      if (lastRewardDay.getTime() === today.getTime()) {
-        return { coins: 0, xp: 0, streak: user.loginStreak, alreadyClaimed: true };
-      }
-
-      const yesterday = new Date(today);
-      yesterday.setDate(yesterday.getDate() - 1);
-      if (lastRewardDay.getTime() < yesterday.getTime()) {
-        user.loginStreak = 0;
-      }
-    }
-
-    user.loginStreak = Math.min(user.loginStreak + 1, 7);
-    const reward = DAILY_REWARDS[(user.loginStreak - 1) % 7];
-
-    user.coins += reward.coins;
-    user.xp += reward.xp;
-    user.lastLoginReward = now;
-    await this.userRepo.save(user);
-
-    await this.rewardRepo.save(
-      this.rewardRepo.create({
-        userId,
-        dayStreak: user.loginStreak,
-        coins: reward.coins,
-        xp: reward.xp,
-      }),
-    );
-
-    return { coins: reward.coins, xp: reward.xp, streak: user.loginStreak, alreadyClaimed: false };
-  }
-
-  async addXp(userId: number, amount: number): Promise<User> {
-    const user = await this.findById(userId);
-    user.xp += amount;
-    user.level = Math.floor(Math.sqrt(user.xp / 100)) + 1;
-    return this.userRepo.save(user);
   }
 
   async addCoins(userId: number, amount: number): Promise<User> {
@@ -127,6 +85,10 @@ export class UsersService {
       // Allow updating nickname only; serial and gameId stay as-is
       user.gameNickname = gameNickname.trim();
     } else {
+      // Закрытый тест: регистрация только после ввода пригласительного кода
+      if (!user.inviteRedeemed) {
+        throw new BadRequestException('Сначала введите пригласительный код');
+      }
       user.gameNickname = gameNickname.trim();
       user.gameId = gameId.trim();
       user.deviceSerial = deviceSerial.trim();
@@ -154,7 +116,7 @@ export class UsersService {
     return this.userRepo.save(user);
   }
 
-  async getBatch(ids: number[]): Promise<{ id: number; gameNickname: string; gameId: string; avatarUrl: string }[]> {
+  async getBatch(ids: number[]): Promise<{ id: number; gameNickname: string; gameId: string; avatarUrl: string; elo: number; isVerified: boolean }[]> {
     if (!ids.length) return [];
     const users = await this.userRepo.findBy({ id: In(ids) });
     return users.map((u) => ({
@@ -162,6 +124,8 @@ export class UsersService {
       gameNickname: u.gameNickname || u.firstName || `Игрок`,
       gameId: u.gameId || '',
       avatarUrl: u.avatarUrl || '',
+      elo: u.elo ?? 1000,
+      isVerified: u.isVerified ?? false,
     }));
   }
 
@@ -211,7 +175,7 @@ export class UsersService {
     });
     const friendIds = rows.map((r) => (r.userId === userId ? r.friendId : r.userId));
     if (!friendIds.length) return [];
-    return this.userRepo.findBy({ id: In(friendIds) });
+    return this.withOnline(await this.userRepo.findBy({ id: In(friendIds) }));
   }
 
   async getFriendRequests(userId: number) {
@@ -220,7 +184,7 @@ export class UsersService {
     });
     if (!rows.length) return [];
     const fromIds = rows.map((r) => r.userId);
-    return this.userRepo.findBy({ id: In(fromIds) });
+    return this.withOnline(await this.userRepo.findBy({ id: In(fromIds) }));
   }
 
   async getFriendshipStatus(userId: number, targetId: number): Promise<string> {
@@ -248,7 +212,6 @@ export class UsersService {
       username: user.hideUsername && viewerId !== targetId ? null : user.username,
       avatarUrl: user.avatarUrl,
       elo: user.elo,
-      level: user.level,
       matchesPlayed: user.matchesPlayed,
       matchesWon: user.matchesWon,
       matchesLost: user.matchesLost,
@@ -257,6 +220,7 @@ export class UsersService {
       avgKills: user.avgKills,
       ratingOverall: user.ratingOverall,
       isPremium: user.isPremium,
+      isVerified: user.isVerified,
       isAdmin: user.isAdmin,
       warns: user.warns ?? 0,
       region: user.region ?? null,
@@ -276,8 +240,6 @@ export class UsersService {
       displayName: user.displayName,
       elo: user.elo,
       coins: user.coins,
-      xp: user.xp,
-      level: user.level,
       matchesPlayed: user.matchesPlayed,
       matchesWon: user.matchesWon,
       matchesLost: user.matchesLost,
@@ -291,10 +253,15 @@ export class UsersService {
       ratingOverall: user.ratingOverall,
       isPremium: user.isPremium,
       premiumUntil: user.premiumUntil,
-      loginStreak: user.loginStreak,
       isAdmin: user.isAdmin,
       isModerator: user.isModerator,
+      isVerified: user.isVerified,
+      isDmHost: user.isDmHost ?? false,
+      cplAccess: user.cplAccess ?? false,
+      cplqAccess: user.cplqAccess ?? false,
+      cplqDanger: user.cplqDanger ?? false,
       isRegistered: user.isRegistered,
+      inviteRedeemed: user.inviteRedeemed ?? false,
       gameNickname: user.gameNickname,
       gameId: user.gameId,
       nicknameChangesUsed: user.nicknameChangesUsed,

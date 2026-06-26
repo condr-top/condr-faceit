@@ -24,8 +24,8 @@ export class LeaderboardService {
       matchesPlayed: u.matchesPlayed,
       winRate: u.winRate,
       kdr: u.kdr,
-      level: u.level,
       isPremium: u.isPremium,
+      isVerified: u.isVerified,
       region: u.region ?? null,
     };
   }
@@ -37,7 +37,7 @@ export class LeaderboardService {
     }
     const users = await this.userRepo.find({
       where: { isBanned: false },
-      order: { elo: 'DESC' },
+      order: { elo: 'DESC', id: 'ASC' },
       take: limit,
     });
     const result = users.map((u, i) => this.mapUser(u, i + 1));
@@ -48,7 +48,7 @@ export class LeaderboardService {
   async getRegionalTop(region: string, limit = 100) {
     const users = await this.userRepo.find({
       where: { isBanned: false, region },
-      order: { elo: 'DESC' },
+      order: { elo: 'DESC', id: 'ASC' },
       take: limit,
     });
     return users.map((u, i) => this.mapUser(u, i + 1));
@@ -57,10 +57,15 @@ export class LeaderboardService {
   async getUserRank(userId: number): Promise<number> {
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) return 0;
+    // Tie-break по id, чтобы при равном ELO ранги были уникальны
+    // (иначе в «топ-5» могло бы попасть больше 5 игроков — важно для Challenger).
     const count = await this.userRepo
       .createQueryBuilder('u')
-      .where('u.elo > :elo', { elo: user.elo })
-      .andWhere('u.is_banned = false')
+      .where('u.is_banned = false')
+      .andWhere('(u.elo > :elo OR (u.elo = :elo AND u.id < :id))', {
+        elo: user.elo,
+        id: user.id,
+      })
       .getCount();
     return count + 1;
   }

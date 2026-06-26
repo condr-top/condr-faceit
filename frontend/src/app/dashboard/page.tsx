@@ -7,18 +7,21 @@ import { useAuthStore } from '@/store/authStore'
 import { RequireRegistration } from '@/components/providers/RequireRegistration'
 import { EloRing } from '@/components/ui/EloRing'
 import { useQueueStore } from '@/store/queueStore'
-import { DailyRewardModal } from '@/components/ui/DailyRewardModal'
 import { CoinPurchaseModal } from '@/components/coins/CoinPurchaseModal'
 import { MiniGameModal } from '@/components/ui/MiniGameModal'
 import { NotificationBell } from '@/components/notifications/NotificationBell'
+import { PartyPanel, PartyDto, Invitation } from '@/components/party/PartyPanel'
 import { api } from '@/lib/api'
+import { getCached, setCached } from '@/lib/cache'
 import { connectSocket } from '@/lib/socket'
-import { getEloRank } from '@/lib/eloRank'
+import { getEloRank, getRankProgress, ELO_RANKS, CHALLENGER_RANK, qualifiesChallenger } from '@/lib/eloRank'
 import { Avatar } from '@/components/ui/Avatar'
 import { Flag } from '@/components/ui/Flag'
+import { Logo } from '@/components/ui/Logo'
 import { Icon, IconName } from '@/components/ui/Icon'
 import { playQueueJoin, playQueueLeave, playMatchFound } from '@/lib/sounds'
 import { useUiStore } from '@/store/uiStore'
+import { useSheetDrag } from '@/lib/useSheetDrag'
 
 // ── Animated counter ──────────────────────────────────────────────────────────
 function AnimatedNumber({ value, duration = 1.2 }: { value: number; duration?: number }) {
@@ -73,36 +76,38 @@ function TiltCard({
       initial={{ opacity: 0, scale: 0.92 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ delay, type: 'spring', stiffness: 300, damping: 22 }}
+      whileTap={{ scale: 0.96 }}
       onMouseMove={e => track(e.clientX, e.clientY)}
       onMouseLeave={reset}
-      onTouchMove={e => { const t = e.touches[0]; track(t.clientX, t.clientY) }}
-      onTouchEnd={reset}
     >
       <button
         ref={cardRef}
         onClick={onClick}
         style={{
-          width: '100%', borderRadius: 14,
-          border: `1px solid ${color}25`,
-          background: glow,
+          width: '100%', borderRadius: 16,
+          border: `1px solid ${color}2a`,
+          background: `radial-gradient(120% 120% at 0% 0%, ${color}12, transparent 55%), #0f0f15`,
           padding: '14px 12px',
           cursor: 'pointer', textAlign: 'left',
           position: 'relative', overflow: 'hidden',
           transition: 'transform 0.15s ease',
           willChange: 'transform',
+          backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden',
         }}
       >
-        <div ref={shineRef} style={{
-          position: 'absolute', inset: 0, pointerEvents: 'none', borderRadius: 14,
-          transition: 'background 0.08s',
-        }} />
+        {/* accent corner glow */}
+        <div style={{ position: 'absolute', top: -30, right: -30, width: 90, height: 90, background: `radial-gradient(circle, ${color}26, transparent 70%)`, pointerEvents: 'none' }} />
+        {/* top accent line */}
+        <div style={{ position: 'absolute', top: 0, left: '12%', right: '12%', height: 1, background: `linear-gradient(90deg, transparent, ${color}88, transparent)` }} />
+        <div ref={shineRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none', borderRadius: 16, transition: 'background 0.08s' }} />
+
+        <div style={{ position: 'absolute', top: -14, right: -10, opacity: 0.10, lineHeight: 1, userSelect: 'none', pointerEvents: 'none' }}><Icon name={icon} size={58} color={color} /></div>
 
         <div style={{
-          position: 'absolute', top: -14, right: -10, opacity: 0.10,
-          lineHeight: 1, userSelect: 'none', pointerEvents: 'none',
-        }}><Icon name={icon} size={58} color={color} /></div>
-
-        <div style={{ marginBottom: 8, position: 'relative' }}><Icon name={icon} size={24} color={color} /></div>
+          width: 38, height: 38, borderRadius: 11, marginBottom: 10, position: 'relative',
+          background: `${color}16`, border: `1px solid ${color}30`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}><Icon name={icon} size={20} color={color} /></div>
         <div style={{ fontSize: 13, fontWeight: 800, color: '#fff', position: 'relative' }}>{label}</div>
         <div style={{ fontSize: 10, color, fontWeight: 600, opacity: 0.75, marginTop: 2, position: 'relative' }}>{sub}</div>
       </button>
@@ -111,33 +116,36 @@ function TiltCard({
 }
 
 // ── Stat chip ─────────────────────────────────────────────────────────────────
-function StatChip({ label, value, color, delay = 0 }: {
-  label: string; value: string | number; color: string; delay?: number
+function StatChip({ label, value, color, icon, delay = 0, valueColor }: {
+  label: string; value: string | number; color: string; icon: IconName; delay?: number; valueColor?: string
 }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay, type: 'spring', stiffness: 300, damping: 24 }}
+      whileTap={{ scale: 0.97 }}
       style={{
-        background: 'rgba(255,255,255,0.04)',
-        border: `1px solid ${color}22`,
-        borderRadius: 12,
-        padding: '10px 6px',
+        background: '#0f0f15',
+        border: `1px solid ${color}26`,
+        borderRadius: 14,
+        padding: '12px 8px 10px',
         textAlign: 'center',
         position: 'relative',
         overflow: 'hidden',
       }}
     >
-      {/* glow strip */}
-      <div style={{
-        position: 'absolute', top: 0, left: '15%', right: '15%', height: 1,
-        background: `linear-gradient(90deg, transparent, ${color}88, transparent)`,
-      }} />
-      <div style={{ fontSize: 16, fontWeight: 900, color, letterSpacing: '-0.5px', lineHeight: 1 }}>
+      <div style={{ position: 'absolute', top: 0, left: '18%', right: '18%', height: 1, background: `linear-gradient(90deg, transparent, ${color}aa, transparent)` }} />
+      <div style={{ position: 'absolute', top: -8, right: -6, opacity: 0.08, pointerEvents: 'none' }}>
+        <Icon name={icon} size={42} color={color} />
+      </div>
+      <div style={{ marginBottom: 5, display: 'flex', justifyContent: 'center', position: 'relative' }}>
+        <Icon name={icon} size={15} color={color} />
+      </div>
+      <div style={{ fontSize: 17, fontWeight: 900, color: valueColor ?? color, letterSpacing: '-0.5px', lineHeight: 1, position: 'relative' }}>
         {typeof value === 'number' ? <AnimatedNumber value={value} /> : value}
       </div>
-      <div style={{ fontSize: 9, color: '#4B5563', fontWeight: 700, marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+      <div style={{ fontSize: 9, color: '#4B5563', fontWeight: 700, marginTop: 5, textTransform: 'uppercase', letterSpacing: '0.06em', position: 'relative' }}>
         {label}
       </div>
     </motion.div>
@@ -195,8 +203,6 @@ export default function DashboardPage() {
   const { inQueue, queueSize, fetchStatus, joinQueue, leaveQueue } = useQueueStore()
   const [queueLoading, setQueueLoading]   = useState(false)
   const [lobbyLoading, setLobbyLoading]   = useState(false)
-  const [showDailyReward, setShowDailyReward] = useState(false)
-  const [dailyReward, setDailyReward]         = useState<any>(null)
   const [showCoinPurchase, setShowCoinPurchase] = useState(false)
   const [showCoinMenu, setShowCoinMenu] = useState(false)
   const [showMiniGame, setShowMiniGame] = useState(false)
@@ -204,19 +210,29 @@ export default function DashboardPage() {
 
   const openCoinMenu  = () => { setShowCoinMenu(true);  setHideNav(true) }
   const closeCoinMenu = () => { setShowCoinMenu(false); setHideNav(false) }
-  const [myRank, setMyRank]     = useState<number | null>(null)
+  const coinSheet = useSheetDrag(closeCoinMenu)
+  const [myRank, setMyRank]     = useState<number | null>(() => getCached<number>('leaderboard-rank'))
   const [lobby, setLobby]       = useState<LobbyInfo | null>(null)
+  const [party, setParty]       = useState<PartyDto | null>(null)
+  const [invitations, setInvitations] = useState<Invitation[]>([])
+  const [mode, setMode]         = useState<'normal' | 'cplq' | 'cpl'>('normal')
   const router = useRouter()
+
+  const loadParty = useCallback(() => {
+    api.get('/party').then(r => { setParty(r.data?.party ?? null); setInvitations(r.data?.invitations ?? []) }).catch(() => {})
+  }, [])
 
   useEffect(() => {
     refreshUser()
-    claimDailyReward()
     fetchStatus()
-    api.get('/leaderboard/rank').then(r => setMyRank(r.data)).catch(() => {})
+    api.get('/leaderboard/rank').then(r => { setMyRank(r.data); setCached('leaderboard-rank', r.data) }).catch(() => {})
+    loadParty()
     const socket = connectSocket()
     socket.on('queue_update', (d: { size: number }) => useQueueStore.setState({ queueSize: d.size }))
     socket.on('match_found',  (d: { matchId: number }) => { useQueueStore.setState({ inQueue: false }); playMatchFound(); router.push(`/match/${d.matchId}`) })
-    return () => { socket.off('queue_update'); socket.off('match_found') }
+    socket.on('party_updated', () => loadParty())
+    socket.on('party_invite',  () => loadParty())
+    return () => { socket.off('queue_update'); socket.off('match_found'); socket.off('party_updated'); socket.off('party_invite') }
   }, [])
 
   const fetchLobby = useCallback(() => {
@@ -230,18 +246,28 @@ export default function DashboardPage() {
 
   useEffect(() => { fetchLobby(); const t = setInterval(fetchLobby, 3000); return () => clearInterval(t) }, [fetchLobby])
 
-  const claimDailyReward = async () => {
-    try {
-      const res = await api.post('/users/daily-reward')
-      if (!res.data.alreadyClaimed) { setDailyReward(res.data); setShowDailyReward(true) }
-    } catch {}
-  }
+  // Если доступ к выбранной лиге пропал (вылет/снятие) — откатываемся к обычному режиму
+  useEffect(() => {
+    if ((mode === 'cpl' && !user?.cplAccess) || (mode === 'cplq' && !user?.cplqAccess)) setMode('normal')
+  }, [user?.cplAccess, user?.cplqAccess, mode])
 
   const findOrCreateLobby = async () => {
+    // Отряд работает только в обычном режиме
+    if (mode === 'normal' && party && party.members.length >= 2) {
+      if (!party.isLeader) { alert('Поиск запускает лидер отряда'); return }
+      setLobbyLoading(true)
+      playQueueJoin()
+      try { const res = await api.post('/party/queue'); router.push(`/match/${res.data.matchId}`) }
+      catch (e: any) { alert(e?.response?.data?.message || 'Ошибка'); setLobbyLoading(false) }
+      return
+    }
     setLobbyLoading(true)
     playQueueJoin()
-    try { const res = await api.post('/matches/lobby/join'); router.push(`/match/${res.data.id}`) }
-    catch (e: any) { alert(e?.response?.data?.message || 'Ошибка'); setLobbyLoading(false) }
+    try {
+      const body = mode === 'normal' ? {} : { league: mode }
+      const res = await api.post('/matches/lobby/join', body)
+      router.push(`/match/${res.data.id}`)
+    } catch (e: any) { alert(e?.response?.data?.message || 'Ошибка'); setLobbyLoading(false) }
   }
 
   const leaveLobby = async () => { await api.post('/matches/lobby/leave').catch(() => {}); setLobby(null); fetchLobby() }
@@ -250,7 +276,19 @@ export default function DashboardPage() {
 
   const rank      = getEloRank(user.elo)
   const isOnCooldown = user.cooldownUntil && new Date(user.cooldownUntil) > new Date()
-  const isChallenger = myRank !== null && myRank <= 5
+  const isChallenger = qualifiesChallenger(user.elo, myRank)
+  const theme     = isChallenger ? CHALLENGER_RANK : rank
+  const accent    = theme.color
+  const nextRank  = ELO_RANKS.find(r => r.min > user.elo) || null
+  const eloToNext = nextRank ? nextRank.min - user.elo : 0
+  const isMaxRank = rank.max === Infinity
+  const segPct = isMaxRank ? 100 : Math.round(getRankProgress(user.elo) * 100)
+  const GREEN = '#22C55E', YELLOW = '#EAB308', RED = '#EF4444'
+  const kdNum   = Number(user.kdr ?? 0)
+  const kdColor = kdNum > 1.1 ? GREEN : kdNum >= 0.9 ? YELLOW : RED
+  const wrColor = user.winRate >= 50 ? GREEN : '#F59E0B'
+  const ratingNum   = Number(user.ratingOverall ?? 0)
+  const ratingColor = ratingNum > 1.1 ? GREEN : ratingNum >= 0.9 ? YELLOW : RED
 
   return (
     <RequireRegistration>
@@ -309,46 +347,15 @@ export default function DashboardPage() {
                 }}>
                   {user.region && <Flag code={user.region} size={12} />}
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.gameNickname || user.firstName}</span>
+                  {user.isVerified && <Icon name="verified" size={14} style={{ flexShrink: 0 }} />}
                 </div>
                 <div style={{ fontSize: 10, color: '#4B5563', fontWeight: 600 }}>
-                  {user.username ? `@${user.username}` : `Уровень ${user.level}`}
+                  {user.username ? `@${user.username}` : `${user.elo} ELO`}
                 </div>
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <NotificationBell />
-              {/* XP ring in top bar */}
-              {(() => {
-                const xpForNext = Math.pow(user.level, 2) * 100
-                const pct = (user.xp % xpForNext) / xpForNext
-                const r = 22, circ = 2 * Math.PI * r
-                return (
-                  <div style={{ position: 'relative', width: 52, height: 52 }}>
-                    <svg width="52" height="52" style={{ transform: 'rotate(-90deg)' }}>
-                      <circle cx="26" cy="26" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="3.5" />
-                      <motion.circle
-                        cx="26" cy="26" r={r} fill="none"
-                        stroke="url(#xpGradTop)" strokeWidth="3.5"
-                        strokeLinecap="round"
-                        strokeDasharray={circ}
-                        initial={{ strokeDashoffset: circ }}
-                        animate={{ strokeDashoffset: circ * (1 - pct) }}
-                        transition={{ duration: 1.2, ease: 'easeOut', delay: 0.3 }}
-                      />
-                      <defs>
-                        <linearGradient id="xpGradTop" x1="0%" y1="0%" x2="100%" y2="0%">
-                          <stop offset="0%" stopColor="#6366f1" />
-                          <stop offset="100%" stopColor="#A855F7" />
-                        </linearGradient>
-                      </defs>
-                    </svg>
-                    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                      <div style={{ fontSize: 14, fontWeight: 900, color: '#fff', lineHeight: 1 }}>{user.level}</div>
-                      <div style={{ fontSize: 7, color: '#4B5563', fontWeight: 700, textTransform: 'uppercase' }}>lvl</div>
-                    </div>
-                  </div>
-                )
-              })()}
             </div>
           </motion.div>
 
@@ -358,57 +365,93 @@ export default function DashboardPage() {
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.05, type: 'spring', stiffness: 280, damping: 26 }}
             style={{
-              borderRadius: 20,
-              marginBottom: 14,
-              overflow: 'hidden',
-              position: 'relative',
-              background: 'linear-gradient(135deg, rgba(232,9,46,0.12) 0%, rgba(15,15,20,0.95) 50%, rgba(168,85,247,0.08) 100%)',
-              border: '1px solid rgba(232,9,46,0.2)',
-              padding: '20px 18px',
+              borderRadius: 24, marginBottom: 14, overflow: 'hidden', position: 'relative',
+              background: `radial-gradient(130% 130% at 0% 0%, ${accent}22, transparent 46%), radial-gradient(130% 130% at 100% 100%, ${accent}14, transparent 52%), linear-gradient(160deg, #0c0c11, #08080b)`,
+              border: `1px solid ${accent}33`,
+              boxShadow: `0 16px 50px ${accent}1a`,
+              padding: 18,
+              backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden', willChange: 'transform',
             }}
           >
+            {/* CONDR logo — roams across the whole card */}
+            <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', pointerEvents: 'none' }}>
+              <motion.div
+                animate={{ x: [-140, 130, -70, 150, -140], y: [-44, 52, -58, 34, -44], opacity: [0.05, 0.11, 0.06, 0.1, 0.05] }}
+                transition={{ duration: 40, repeat: Infinity, ease: 'easeInOut' }}
+              >
+                <motion.div
+                  animate={{ rotate: 360, scale: [1, 1.08, 1] }}
+                  transition={{ rotate: { duration: 75, repeat: Infinity, ease: 'linear' }, scale: { duration: 11, repeat: Infinity, ease: 'easeInOut' } }}
+                  style={{ filter: `drop-shadow(0 0 22px ${accent}66)` }}
+                >
+                  <Logo size={210} color={accent} />
+                </motion.div>
+              </motion.div>
+            </div>
+            {/* Dotted grid */}
+            <div style={{
+              position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0.5,
+              backgroundImage: 'radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px)', backgroundSize: '18px 18px',
+              WebkitMaskImage: 'radial-gradient(120% 120% at 20% 0%, #000 24%, transparent 70%)',
+              maskImage: 'radial-gradient(120% 120% at 20% 0%, #000 24%, transparent 70%)',
+            }} />
+            {/* Shimmer */}
+            <motion.div animate={{ x: ['-130%', '230%'] }} transition={{ duration: 5, repeat: Infinity, repeatDelay: 6, ease: 'linear' }}
+              style={{ position: 'absolute', top: 0, bottom: 0, width: '28%', pointerEvents: 'none', background: `linear-gradient(90deg, transparent, ${accent}16, transparent)` }} />
 
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <div style={{ fontSize: 11, color: '#4B5563', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>
-                  Текущий рейтинг
-                </div>
-                <div style={{ fontSize: 42, fontWeight: 900, color: '#fff', letterSpacing: '-2px', lineHeight: 1 }}>
+            {/* Header */}
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <span style={{ fontSize: 10, color: '#6B7280', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.14em' }}>Текущий рейтинг</span>
+              {myRank && (
+                <span style={{ fontSize: 10, fontWeight: 800, color: accent, display: 'inline-flex', alignItems: 'center', gap: 4, background: `${accent}14`, border: `1px solid ${accent}30`, padding: '3px 9px', borderRadius: 20 }}>
+                  <Icon name="trophy" size={11} color={accent} />#{myRank} в мире
+                </span>
+              )}
+            </div>
+
+            {/* Main row — orb on the same level as the ELO number */}
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
+              <div style={{ minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <span style={{ fontSize: 52, fontWeight: 900, letterSpacing: '-2.5px', lineHeight: 0.95, color: '#fff', textShadow: `0 2px 24px ${accent}88` }}>
                   <AnimatedNumber value={user.elo} duration={1.5} />
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
-                  <span style={{
-                    fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 20,
-                    background: `${rank.color}18`, color: rank.color,
-                    border: `1px solid ${rank.color}40`, letterSpacing: '0.04em',
-                  }}>
-                    {rank.label}
-                  </span>
-                  {myRank && (
-                    <span style={{ fontSize: 11, color: '#4B5563', fontWeight: 600 }}>
-                      #{myRank} в рейтинге
-                    </span>
-                  )}
-                </div>
+                </span>
+                <span style={{ fontSize: 13, fontWeight: 800, color: '#6B7280', letterSpacing: '0.06em' }}>ELO</span>
               </div>
 
-              {/* EloRing in hero card */}
-              <div style={{ textAlign: 'center' }}>
-                <EloRing elo={user.elo} size={72} isChallenger={isChallenger} />
+              {/* Rank orb with pulsing glow */}
+              <div style={{ position: 'relative', flexShrink: 0 }}>
+                <motion.div
+                  animate={{ opacity: [0.35, 0.7, 0.35], scale: [1, 1.1, 1] }}
+                  transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
+                  style={{ position: 'absolute', inset: -14, borderRadius: '50%', background: `radial-gradient(circle, ${accent}4a, transparent 70%)`, pointerEvents: 'none' }}
+                />
+                <div style={{ position: 'relative', filter: `drop-shadow(0 0 16px ${accent}99)` }}>
+                  <EloRing elo={user.elo} size={88} isChallenger={isChallenger} showLabel={false} />
+                </div>
+              </div>
+            </div>
+
+            {/* Rank progress bar */}
+            <div style={{ position: 'relative', marginTop: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 10, color: '#6B7280', fontWeight: 700 }}>
+                <span style={{ color: accent }}>{isChallenger ? 'Challenger' : rank.label}</span>
+                <span>{nextRank ? <>До {nextRank.label}: <b style={{ color: accent }}>{eloToNext}</b></> : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="bolt" size={10} color={accent} />Макс. ранг</span>}</span>
+              </div>
+              <div style={{ height: 6, background: 'rgba(255,255,255,0.07)', borderRadius: 3, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${segPct}%` }}
+                  transition={{ duration: 1, ease: 'easeOut', delay: 0.3 }}
+                  style={{ height: '100%', borderRadius: 3, background: `linear-gradient(90deg, ${accent}aa, ${accent})`, boxShadow: `0 0 8px ${accent}88` }}
+                />
               </div>
             </div>
 
             {/* Calibration notice */}
             {user.matchesPlayed < 10 && (
               <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.6 }}
-                style={{
-                  marginTop: 12, padding: '7px 10px', borderRadius: 8,
-                  background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.2)',
-                  display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#C084FC',
-                }}
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}
+                style={{ position: 'relative', marginTop: 12, padding: '8px 11px', borderRadius: 10, background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.2)', display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#C084FC' }}
               >
                 <Icon name="target" size={14} color="#C084FC" />
                 <span>Калибровка: {user.matchesPlayed}/10 матчей · Win <b>+80</b> / Loss <b>−40</b> ELO</span>
@@ -418,9 +461,9 @@ export default function DashboardPage() {
 
           {/* ── STATS ROW ── */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 8 }}>
-            <StatChip label="Матчи"   value={user.matchesPlayed}          color="#60A5FA" delay={0.1} />
-            <StatChip label="Винрейт" value={`${user.winRate}%`}          color="#22C55E" delay={0.15} />
-            <StatChip label="K/D"     value={Number(user.kdr).toFixed(2)} color="#F59E0B" delay={0.2} />
+            <StatChip label="Матчи"   value={user.matchesPlayed}   color="#6B7280" icon="gamepad"    delay={0.1}  valueColor="#F3F4F6" />
+            <StatChip label="Винрейт" value={`${user.winRate}%`}    color="#6B7280" icon="trendingUp" delay={0.15} valueColor={wrColor} />
+            <StatChip label="Рейтинг" value={ratingNum.toFixed(2)}  color="#6B7280" icon="barChart"   delay={0.2}  valueColor={ratingColor} />
           </div>
 
           {/* ── COINS BAR ── */}
@@ -430,13 +473,16 @@ export default function DashboardPage() {
             transition={{ delay: 0.23 }}
             style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              background: 'rgba(234,179,8,0.06)', border: '1px solid rgba(234,179,8,0.18)',
-              borderRadius: 14, padding: '10px 16px', marginBottom: 14,
-              position: 'relative', overflow: 'hidden',
+              background: 'linear-gradient(135deg, rgba(234,179,8,0.12), #0f0f15 65%)', border: '1px solid rgba(234,179,8,0.28)',
+              borderRadius: 16, padding: '12px 16px', marginBottom: 14,
+              position: 'relative', overflow: 'hidden', boxShadow: '0 8px 26px rgba(234,179,8,0.1)',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <Icon name="coins" size={22} color="#EAB308" />
+            <div style={{ position: 'absolute', right: -24, top: -24, width: 110, height: 110, background: 'radial-gradient(circle, rgba(234,179,8,0.22), transparent 70%)', pointerEvents: 'none' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, position: 'relative' }}>
+              <div style={{ width: 38, height: 38, borderRadius: 11, flexShrink: 0, background: 'rgba(234,179,8,0.14)', border: '1px solid rgba(234,179,8,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name="coins" size={20} color="#EAB308" />
+              </div>
               <div>
                 <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', lineHeight: 1, marginBottom: 2 }}>
                   Монеты
@@ -465,194 +511,141 @@ export default function DashboardPage() {
           {/* ── COOLDOWN ── */}
           {isOnCooldown && <CooldownBanner until={new Date(user.cooldownUntil!)} />}
 
-          {/* ── FIND MATCH 5v5 ── */}
+          {/* ── PLAY ZONE HEADER ── */}
           <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.18, type: 'spring', stiffness: 260, damping: 24 }}
-            style={{ marginBottom: 10 }}
+            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}
           >
-            <AnimatePresence mode="wait">
-              {inQueue ? (
-                <motion.div
-                  key="q5-on"
-                  initial={{ opacity: 0, scale: 0.97 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.97 }}
-                  style={{
-                    borderRadius: 16,
-                    background: 'rgba(232,9,46,0.06)',
-                    border: '1px solid rgba(232,9,46,0.35)',
-                    padding: '14px 16px',
-                    overflow: 'hidden', position: 'relative',
-                  }}
-                >
-                  {/* Animated search sweep */}
-                  <motion.div
-                    animate={{ x: ['-100%', '200%'] }}
-                    transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
-                    style={{
-                      position: 'absolute', top: 0, bottom: 0, width: '40%',
-                      background: 'linear-gradient(90deg, transparent, rgba(232,9,46,0.08), transparent)',
-                    }}
-                  />
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                    <motion.div
-                      animate={{ scale: [1, 1.4, 1], opacity: [1, 0.6, 1] }}
-                      transition={{ duration: 1, repeat: Infinity }}
-                      style={{ width: 8, height: 8, borderRadius: '50%', background: '#E8092E', flexShrink: 0 }}
-                    />
-                    <span style={{ fontWeight: 800, fontSize: 13, flex: 1, display: 'flex', alignItems: 'center', gap: 7 }}><Icon name="swords" size={16} color="#fff" />Поиск матча 5v5</span>
-                    <span style={{ fontSize: 12, color: '#E8092E', fontWeight: 800 }}>{queueSize}/10</span>
-                  </div>
-                  <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
-                    {Array.from({ length: 10 }).map((_, i) => (
-                      <motion.div
-                        key={i}
-                        animate={i < queueSize ? { opacity: [0.7, 1, 0.7] } : {}}
-                        transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.1 }}
-                        style={{
-                          flex: 1, height: 5, borderRadius: 3,
-                          background: i < queueSize ? '#E8092E' : 'rgba(255,255,255,0.07)',
-                          boxShadow: i < queueSize ? '0 0 6px rgba(232,9,46,0.6)' : 'none',
-                          transition: 'background 0.3s',
-                        }}
-                      />
-                    ))}
-                  </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <span style={{ flex: 1, fontSize: 11, color: '#4B5563', alignSelf: 'center' }}>Ожидаем игроков...</span>
-                    <button
-                      onClick={async () => { setQueueLoading(true); playQueueLeave(); try { await leaveQueue() } finally { setQueueLoading(false) } }}
-                      style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, padding: '6px 14px', color: '#6B7280', fontSize: 12, cursor: 'pointer' }}
-                    >
-                      Выйти
-                    </button>
-                  </div>
-                </motion.div>
-              ) : (
-                <motion.button
-                  key="q5-off"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  whileTap={{ scale: 0.97 }}
-                  disabled={queueLoading || !!isOnCooldown}
-                  onClick={async () => {
-                    setQueueLoading(true)
-                    try { playQueueJoin(); await joinQueue() }
-                    catch (e: any) { alert(e?.response?.data?.message || 'Ошибка') }
-                    finally { setQueueLoading(false) }
-                  }}
-                  style={{
-                    width: '100%', borderRadius: 16, border: 'none', cursor: 'pointer',
-                    background: 'linear-gradient(135deg, rgba(232,9,46,0.9) 0%, rgba(180,0,30,0.95) 100%)',
-                    padding: '18px 0', position: 'relative', overflow: 'hidden',
-                    boxShadow: isOnCooldown ? 'none' : '0 4px 32px rgba(232,9,46,0.35), inset 0 1px 0 rgba(255,255,255,0.1)',
-                    opacity: (queueLoading || !!isOnCooldown) ? 0.5 : 1,
-                  }}
-                >
-                  {/* Shimmer */}
-                  {!isOnCooldown && (
-                    <motion.div
-                      animate={{ x: ['-100%', '200%'] }}
-                      transition={{ duration: 2.5, repeat: Infinity, repeatDelay: 3 }}
-                      style={{
-                        position: 'absolute', top: 0, bottom: 0, width: '35%',
-                        background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent)',
-                        pointerEvents: 'none',
-                      }}
-                    />
-                  )}
-                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-                    <Icon name="swords" size={22} color="#fff" />
-                    <div>
-                      <div style={{ fontSize: 15, fontWeight: 900, color: '#fff', letterSpacing: '0.02em' }}>
-                        {queueLoading ? 'Подключаемся...' : 'Найти матч 5v5'}
-                      </div>
-                      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.55)', fontWeight: 600, marginTop: 1 }}>
-                        Рейтинговый · {queueSize} в очереди
-                      </div>
-                    </div>
-                  </div>
-                </motion.button>
-              )}
-            </AnimatePresence>
+            <span style={{ fontSize: 11, color: '#E5E7EB', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em', display: 'flex', alignItems: 'center', gap: 9 }}>
+              <span style={{ width: 3, height: 13, borderRadius: 2, background: '#E8092E', boxShadow: '0 0 8px rgba(232,9,46,0.6)' }} />Играть
+            </span>
+            <span style={{ fontSize: 10, color: '#4B5563', fontWeight: 700 }}>Рейтинговый режим 5×5</span>
           </motion.div>
 
-          {/* ── FIND MATCH 2v2 ── */}
+          {/* ── MODE SELECTOR (Обычный / CPL-Q / CPL) — sliding highlight ── */}
+          {!lobby && (() => {
+            const tabs = ([
+              { key: 'normal', label: 'Обычный', locked: false },
+              { key: 'cplq',   label: 'CPL-Q',   locked: !user.cplqAccess },
+              { key: 'cpl',    label: 'CPL',     locked: !user.cplAccess },
+            ] as { key: typeof mode; label: string; locked: boolean }[])
+            const activeIdx = Math.max(0, tabs.findIndex(t => t.key === mode))
+            return (
+              <div style={{ position: 'relative', display: 'flex', marginBottom: 10, background: 'rgba(255,255,255,0.035)', padding: 4, borderRadius: 14, border: '1px solid rgba(255,255,255,0.06)' }}>
+                {/* sliding highlight — animates only on index change, never on mount/reflow */}
+                <motion.div
+                  initial={false}
+                  animate={{ x: `${activeIdx * 100}%` }}
+                  transition={{ type: 'spring', stiffness: 360, damping: 32 }}
+                  style={{ position: 'absolute', top: 4, bottom: 4, left: 4, width: 'calc((100% - 8px) / 3)', borderRadius: 10, background: 'linear-gradient(135deg, #E8092E, #b4001e)', boxShadow: '0 2px 9px rgba(232,9,46,0.3)', zIndex: 0, willChange: 'transform', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}
+                />
+                {tabs.map(m => {
+                  const active = mode === m.key
+                  return (
+                    <button key={m.key} onClick={() => m.locked ? alert('Доступ к лиге выдаёт администратор') : setMode(m.key)}
+                      style={{ flex: 1, position: 'relative', zIndex: 1, padding: '9px 0', border: 'none', cursor: 'pointer', background: 'none', borderRadius: 10, fontSize: 12.5, fontWeight: 800, color: active ? '#fff' : m.locked ? '#4B5563' : '#9CA3AF', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, transition: 'color .25s ease' }}>
+                      {m.locked && <Icon name="lock" size={12} color="#4B5563" />}{m.label}
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          })()}
+
+          {/* ── FIND MATCH (5v5 lobby) ── */}
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.24, type: 'spring', stiffness: 260, damping: 24 }}
-            style={{ marginBottom: 18 }}
+            style={{ marginBottom: 10 }}
           >
             <AnimatePresence mode="wait">
               {lobby ? (
                 <motion.div
-                  key="l2-on"
+                  key="lobby-on"
                   initial={{ opacity: 0, scale: 0.97 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.97 }}
                   style={{
-                    borderRadius: 16,
-                    background: 'rgba(168,85,247,0.06)',
-                    border: '1px solid rgba(168,85,247,0.3)',
-                    padding: '14px 16px', position: 'relative', overflow: 'hidden',
+                    borderRadius: 18,
+                    background: 'rgba(232,9,46,0.06)',
+                    border: '1px solid rgba(232,9,46,0.35)',
+                    padding: '15px 16px', position: 'relative', overflow: 'hidden',
                   }}
                 >
                   <motion.div
                     animate={{ x: ['-100%', '200%'] }}
-                    transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                    transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
                     style={{
-                      position: 'absolute', top: 0, bottom: 0, width: '40%',
-                      background: 'linear-gradient(90deg, transparent, rgba(168,85,247,0.07), transparent)',
+                      position: 'absolute', top: 0, bottom: 0, width: '38%',
+                      background: 'linear-gradient(90deg, transparent, rgba(232,9,46,0.08), transparent)',
                     }}
                   />
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                    <span style={{ fontWeight: 800, fontSize: 13, display: 'flex', alignItems: 'center', gap: 7 }}><Icon name="bolt" size={16} color="#C084FC" />Очередь 2v2</span>
-                    <span style={{ fontSize: 12, color: '#A855F7', fontWeight: 800 }}>{lobby.filled}/{lobby.slots}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                    <motion.div animate={{ scale: [1, 1.4, 1], opacity: [1, 0.6, 1] }} transition={{ duration: 1, repeat: Infinity }}
+                      style={{ width: 8, height: 8, borderRadius: '50%', background: '#E8092E', flexShrink: 0 }} />
+                    <span style={{ fontWeight: 800, fontSize: 13, flex: 1, display: 'flex', alignItems: 'center', gap: 7 }}><Icon name="swords" size={16} color="#fff" />Поиск матча 5×5</span>
+                    <span style={{ fontSize: 12, color: '#E8092E', fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{lobby.filled}/{lobby.slots}</span>
                   </div>
-                  <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-                    {Array.from({ length: lobby.slots ?? 4 }).map((_, i) => {
+
+                  {/* 10 slots — 5 per row */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 5, marginBottom: 12 }}>
+                    {Array.from({ length: lobby.slots ?? 10 }).map((_, i) => {
                       const p = lobby.players?.[i]
                       const isMe = p?.id === user.id
                       return (
-                        <div key={i} style={{
-                          flex: 1, padding: '8px 4px', borderRadius: 8, textAlign: 'center',
-                          fontSize: 11, fontWeight: 700,
-                          background: p ? isMe ? 'rgba(232,9,46,0.2)' : 'rgba(168,85,247,0.15)' : 'rgba(255,255,255,0.03)',
-                          color: p ? isMe ? '#F87171' : '#C084FC' : '#2D2D2D',
-                          border: p ? isMe ? '1px solid rgba(232,9,46,0.35)' : '1px solid rgba(168,85,247,0.25)' : '1px dashed rgba(255,255,255,0.06)',
-                        }}>
-                          {p ? (isMe ? 'Ты' : p.name.slice(0, 6)) : '—'}
-                        </div>
+                        <motion.div
+                          key={i}
+                          initial={false}
+                          animate={p ? { scale: [0.85, 1.06, 1] } : {}}
+                          transition={{ duration: 0.35 }}
+                          style={{
+                            padding: '9px 2px', borderRadius: 9, textAlign: 'center',
+                            fontSize: 10, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                            background: p ? isMe ? 'rgba(232,9,46,0.22)' : 'rgba(232,9,46,0.12)' : 'rgba(255,255,255,0.03)',
+                            color: p ? isMe ? '#F87171' : '#fca5a5' : '#2D2D2D',
+                            border: p ? isMe ? '1px solid rgba(232,9,46,0.45)' : '1px solid rgba(232,9,46,0.25)' : '1px dashed rgba(255,255,255,0.07)',
+                            boxShadow: p && !isMe ? '0 0 8px rgba(232,9,46,0.15)' : 'none',
+                          }}
+                        >
+                          {p ? (isMe ? 'Ты' : p.name.slice(0, 5)) : '—'}
+                        </motion.div>
                       )
                     })}
                   </div>
+
+                  {/* Progress */}
+                  <div style={{ height: 5, background: 'rgba(255,255,255,0.06)', borderRadius: 3, overflow: 'hidden', marginBottom: 12 }}>
+                    <motion.div
+                      animate={{ width: `${((lobby.filled ?? 0) / (lobby.slots || 10)) * 100}%` }}
+                      transition={{ type: 'spring', stiffness: 120, damping: 20 }}
+                      style={{ height: '100%', borderRadius: 3, background: 'linear-gradient(90deg, #E8092E, #ff5a72)', boxShadow: '0 0 8px rgba(232,9,46,0.5)' }}
+                    />
+                  </div>
+
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button
                       onClick={() => router.push(`/match/${lobby.matchId}`)}
                       style={{
-                        flex: 1, background: 'linear-gradient(135deg, #7c3aed, #A855F7)',
-                        border: 'none', borderRadius: 10, padding: '10px 0',
+                        flex: 1, background: 'linear-gradient(135deg, rgba(232,9,46,0.95), rgba(180,0,30,0.95))',
+                        border: 'none', borderRadius: 11, padding: '11px 0',
                         color: '#fff', fontWeight: 800, fontSize: 13, cursor: 'pointer',
-                        boxShadow: '0 2px 16px rgba(168,85,247,0.3)',
+                        boxShadow: '0 2px 16px rgba(232,9,46,0.35)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                       }}
                     >
                       <motion.div animate={{ scale: [1, 1.4, 1] }} transition={{ duration: 1, repeat: Infinity }} style={{ width: 5, height: 5, borderRadius: '50%', background: '#fff' }} />
-                      Вернуться
+                      {lobby.filled >= lobby.slots ? 'В матч' : 'Открыть лобби'}
                     </button>
                     <button
                       onClick={leaveLobby}
-                      style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, padding: '10px 14px', color: '#6B7280', fontSize: 12, cursor: 'pointer' }}
-                    >✕</button>
+                      style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 11, padding: '11px 14px', color: '#6B7280', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                    ><Icon name="x" size={14} /></button>
                   </div>
                 </motion.div>
               ) : (
                 <motion.button
-                  key="l2-off"
+                  key="lobby-off"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
@@ -660,42 +653,92 @@ export default function DashboardPage() {
                   disabled={lobbyLoading || !!isOnCooldown}
                   onClick={findOrCreateLobby}
                   style={{
-                    width: '100%', borderRadius: 16, border: '1px solid rgba(168,85,247,0.3)',
-                    cursor: 'pointer', padding: '16px 0', position: 'relative', overflow: 'hidden',
-                    background: 'rgba(168,85,247,0.07)',
+                    width: '100%', borderRadius: 16, border: 'none', cursor: 'pointer',
+                    background: 'linear-gradient(135deg, rgba(232,9,46,0.9) 0%, rgba(180,0,30,0.95) 100%)',
+                    padding: '18px 0', position: 'relative', overflow: 'hidden',
+                    boxShadow: isOnCooldown ? 'none' : '0 4px 32px rgba(232,9,46,0.35), inset 0 1px 0 rgba(255,255,255,0.1)',
                     opacity: (lobbyLoading || !!isOnCooldown) ? 0.5 : 1,
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-                    <Icon name="bolt" size={20} color="#C084FC" />
-                    <div>
-                      <div style={{ fontSize: 14, fontWeight: 800, color: '#C084FC' }}>
-                        {lobbyLoading ? 'Подключаемся...' : 'Найти матч 2v2'}
-                      </div>
-                      <div style={{ fontSize: 10, color: '#6B7280', fontWeight: 600, marginTop: 1 }}>
-                        Быстрый · без ожидания
-                      </div>
-                    </div>
+                  {!isOnCooldown && (
+                    <motion.div
+                      animate={{ x: ['-100%', '200%'] }}
+                      transition={{ duration: 2.5, repeat: Infinity, repeatDelay: 3 }}
+                      style={{ position: 'absolute', top: 0, bottom: 0, width: '35%', background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent)', pointerEvents: 'none' }}
+                    />
+                  )}
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+                    <Icon name="swords" size={22} color="#fff" />
+                    <AnimatePresence mode="wait" initial={false}>
+                      <motion.div
+                        key={lobbyLoading ? 'loading' : mode}
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -6 }}
+                        transition={{ duration: 0.18 }}
+                      >
+                        <div style={{ fontSize: 15, fontWeight: 900, color: '#fff', letterSpacing: '0.02em' }}>
+                          {lobbyLoading ? 'Подключаемся...' : mode === 'cpl' ? 'Найти матч · CPL' : mode === 'cplq' ? 'Найти матч · CPL-Q' : 'Найти матч'}
+                        </div>
+                        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)', fontWeight: 600, marginTop: 1 }}>
+                          {mode === 'cpl' ? 'CONDR Pro League · про-сцена' : mode === 'cplq' ? 'Квалификации в Pro League' : '5 на 5 · подбор по уровню'}
+                        </div>
+                      </motion.div>
+                    </AnimatePresence>
                   </div>
                 </motion.button>
               )}
             </AnimatePresence>
           </motion.div>
 
+          {/* ── PARTY / SQUAD — squad modifier for ranked matchmaking ── */}
+          {!lobby && <PartyPanel party={party} invitations={invitations} refresh={loadParty} />}
+
+          {/* ── SECONDARY MODE HEADER ── */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, marginTop: 4 }}
+          >
+            <span style={{ fontSize: 11, color: '#E5E7EB', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em', display: 'flex', alignItems: 'center', gap: 9 }}>
+              <span style={{ width: 3, height: 13, borderRadius: 2, background: '#E8092E', boxShadow: '0 0 8px rgba(232,9,46,0.6)' }} />Другие режимы
+            </span>
+            <span style={{ fontSize: 10, color: '#4B5563', fontWeight: 700 }}>Без рейтинга</span>
+          </motion.div>
+
+          {/* ── CONDR DM ── */}
+          <motion.button
+            initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.32, type: 'spring', stiffness: 260, damping: 24 }}
+            whileTap={{ scale: 0.98 }} onClick={() => router.push('/dm')}
+            style={{ width: '100%', marginBottom: 14, borderRadius: 16, cursor: 'pointer', position: 'relative', overflow: 'hidden', padding: '15px 16px', display: 'flex', alignItems: 'center', gap: 13, textAlign: 'left', background: 'radial-gradient(120% 120% at 0% 0%, rgba(232,9,46,0.12), transparent 55%), #0f0f15', border: '1px solid rgba(232,9,46,0.22)' }}>
+            <div style={{ position: 'absolute', top: 0, left: '14%', right: '14%', height: 1, background: 'linear-gradient(90deg, transparent, rgba(232,9,46,0.55), transparent)' }} />
+            <motion.div animate={{ x: ['-120%', '220%'] }} transition={{ duration: 3.5, repeat: Infinity, repeatDelay: 4, ease: 'linear' }} style={{ position: 'absolute', top: 0, bottom: 0, width: '28%', background: 'linear-gradient(90deg, transparent, rgba(232,9,46,0.08), transparent)', pointerEvents: 'none' }} />
+            <div style={{ width: 44, height: 44, borderRadius: 13, flexShrink: 0, background: 'rgba(232,9,46,0.12)', border: '1px solid rgba(232,9,46,0.28)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+              <Icon name="flame" size={22} color="#E8092E" />
+            </div>
+            <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+              <div style={{ fontSize: 15.5, fontWeight: 900, color: '#fff', letterSpacing: '0.01em' }}>CONDR DM</div>
+              <div style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 600, marginTop: 1 }}>Дезматч · быстрый разогрев</div>
+            </div>
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 20, background: 'rgba(232,9,46,0.14)', border: '1px solid rgba(232,9,46,0.3)', fontSize: 10, fontWeight: 800, color: '#ff5267', whiteSpace: 'nowrap' }}>
+              Играть<Icon name="chevronRight" size={13} color="#ff5267" />
+            </div>
+          </motion.button>
+
           {/* ── QUICK LINKS ── */}
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
+            transition={{ delay: 0.36 }}
+            style={{ marginTop: 6 }}
           >
-            <div style={{ fontSize: 10, color: '#374151', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10 }}>
-              Разделы
+            <div style={{ fontSize: 11, color: '#E5E7EB', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 9 }}>
+              <span style={{ width: 3, height: 13, borderRadius: 2, background: '#E8092E', boxShadow: '0 0 8px rgba(232,9,46,0.6)' }} />Разделы
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               {[
-                { icon: 'trophy', label: 'Рейтинг',  sub: 'Топ игроков',   href: '/leaderboard', color: '#F59E0B', glow: 'rgba(245,158,11,0.12)'  },
-                { icon: 'target', label: 'Задания',   sub: 'Ежедневные',    href: '/missions',    color: '#22C55E', glow: 'rgba(34,197,94,0.12)'   },
-                { icon: 'cart', label: 'Магазин',   sub: 'Варны и скины', href: '/shop',        color: '#A855F7', glow: 'rgba(168,85,247,0.12)'  },
+                { icon: 'users', label: 'Друзья',   sub: 'Твои контакты', href: '/friends',     color: '#34D399', glow: 'rgba(52,211,153,0.12)'  },
+                { icon: 'target', label: 'Задания',   sub: 'Ежедневные',    href: '/missions',    color: '#FBBF24', glow: 'rgba(251,191,36,0.12)'  },
+                { icon: 'cart', label: 'Магазин',   sub: 'Варны и скины', href: '/shop',        color: '#C084FC', glow: 'rgba(192,132,252,0.12)' },
                 { icon: 'chat', label: 'Поддержка', sub: 'Помощь · FAQ',  href: '/support',     color: '#60A5FA', glow: 'rgba(96,165,250,0.12)'  },
               ].map((item, i) => (
                 <TiltCard
@@ -710,10 +753,6 @@ export default function DashboardPage() {
 
         </div>
       </div>
-
-      {showDailyReward && dailyReward && (
-        <DailyRewardModal reward={dailyReward} onClose={() => setShowDailyReward(false)} />
-      )}
 
       {/* Coin purchase modal */}
       {showCoinPurchase && (
@@ -749,6 +788,7 @@ export default function DashboardPage() {
             onClick={closeCoinMenu}
           >
             <motion.div
+              {...coinSheet.panelProps}
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
@@ -764,7 +804,9 @@ export default function DashboardPage() {
                 padding: '20px 20px 40px',
               }}
             >
-              <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.15)', margin: '0 auto 20px' }} />
+              <div {...coinSheet.handleProps} style={{ ...coinSheet.handleProps.style, padding: '2px 0 18px' }}>
+                <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.15)' }} />
+              </div>
               <div style={{ fontSize: 18, fontWeight: 900, color: '#fff', marginBottom: 4, textAlign: 'center' }}>Получить монеты</div>
               <div style={{ fontSize: 12, color: '#4B5563', textAlign: 'center', marginBottom: 20 }}>
                 Текущий баланс: <b style={{ color: '#EAB308', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="coins" size={13} color="#EAB308" />{user.coins}</b>

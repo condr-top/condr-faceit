@@ -35,9 +35,6 @@ export class Mission {
   @Column({ name: 'reward_coins', default: 0 })
   rewardCoins: number;
 
-  @Column({ name: 'reward_xp', default: 0 })
-  rewardXp: number;
-
   @Column({ name: 'mission_key' })
   missionKey: string;
 

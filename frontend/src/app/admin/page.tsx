@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/store/authStore'
 import { api } from '@/lib/api'
+import { Icon, IconName } from '@/components/ui/Icon'
 
 // ─────────────── Types ───────────────
 interface Stats {
@@ -31,6 +32,10 @@ interface AdminUser {
   isBanned: boolean
   isAdmin: boolean
   isModerator: boolean
+  isVerified: boolean
+  isDmHost?: boolean
+  cplAccess?: boolean
+  cplqAccess?: boolean
   banReason?: string
   warns: number
 }
@@ -86,12 +91,17 @@ interface AdminPurchase {
   createdAt: string
 }
 
-type TabId = 'stats' | 'users' | 'matches' | 'results' | 'reports' | 'purchases' | 'create' | 'kd' | 'support'
+type TabId = 'stats' | 'users' | 'matches' | 'results' | 'reports' | 'purchases' | 'create' | 'kd' | 'support' | 'invite'
 
-interface SupportChat {
+interface SupportTicketRow {
+  id: number
   userId: number
   displayName: string
   avatarUrl: string | null
+  category: string
+  categoryLabel: string
+  subject: string
+  status: string
   lastMessage: string
   lastAt: string
   unread: number
@@ -104,20 +114,21 @@ interface SupportMsg {
   createdAt: string
 }
 
-const ADMIN_TABS: { id: TabId; label: string; badge?: (s: Stats | null, sup?: number) => number }[] = [
-  { id: 'stats',     label: '📊 Стата' },
-  { id: 'users',     label: '👥 Игроки' },
-  { id: 'matches',   label: '⚔️ Матчи' },
-  { id: 'results',   label: '⏳ Результаты', badge: (s) => s?.pendingResults ?? 0 },
-  { id: 'reports',   label: '🚨 Репорты',    badge: (s) => s?.pendingReports ?? 0 },
-  { id: 'purchases', label: '💰 Покупки',    badge: (s) => s?.pendingPurchases ?? 0 },
-  { id: 'create',    label: '➕ Создать' },
-  { id: 'kd',        label: '🎯 K/D' },
-  { id: 'support',   label: '💬 Поддержка',  badge: (_s, sup) => sup ?? 0 },
+const ADMIN_TABS: { id: TabId; icon: IconName; label: string; badge?: (s: Stats | null, sup?: number) => number }[] = [
+  { id: 'stats',     icon: 'barChart', label: 'Стата' },
+  { id: 'users',     icon: 'users',    label: 'Игроки' },
+  { id: 'matches',   icon: 'swords',   label: 'Матчи' },
+  { id: 'results',   icon: 'hourglass',label: 'Результаты', badge: (s) => s?.pendingResults ?? 0 },
+  { id: 'reports',   icon: 'warning',  label: 'Репорты',    badge: (s) => s?.pendingReports ?? 0 },
+  { id: 'purchases', icon: 'coins',    label: 'Покупки',    badge: (s) => s?.pendingPurchases ?? 0 },
+  { id: 'create',    icon: 'plus',     label: 'Создать' },
+  { id: 'kd',        icon: 'target',   label: 'K/D' },
+  { id: 'support',   icon: 'chat',     label: 'Поддержка',  badge: (_s, sup) => sup ?? 0 },
+  { id: 'invite',    icon: 'lock',     label: 'Инвайт' },
 ]
 
-const MOD_TABS: { id: TabId; label: string }[] = [
-  { id: 'kd', label: '🎯 K/D' },
+const MOD_TABS: { id: TabId; icon: IconName; label: string }[] = [
+  { id: 'kd', icon: 'target', label: 'K/D' },
 ]
 
 const REASON_LABELS: Record<string, string> = {
@@ -275,14 +286,32 @@ export default function AdminPage() {
   const [kdTotalRounds, setKdTotalRounds] = useState('')
   const [kdResetId, setKdResetId] = useState('')
 
-  // ── Support ──
-  const [supportChats, setSupportChats] = useState<SupportChat[]>([])
+  // ── Support (tickets) ──
+  const [tickets, setTickets] = useState<SupportTicketRow[]>([])
+  const [ticketFilter, setTicketFilter] = useState<'open' | 'closed'>('open')
   const [supportUnread, setSupportUnread] = useState(0)
-  const [openChatUserId, setOpenChatUserId] = useState<number | null>(null)
+  const [openTicketId, setOpenTicketId] = useState<number | null>(null)
+  const [activeTicket, setActiveTicket] = useState<SupportTicketRow | null>(null)
   const [chatMessages, setChatMessages] = useState<SupportMsg[]>([])
   const [replyText, setReplyText] = useState('')
   const [replySending, setReplySending] = useState(false)
   const chatBottomRef = useRef<HTMLDivElement>(null)
+
+  // ── Invite code ──
+  const [invite, setInvite] = useState<{ code: string; used: boolean; secondsLeft: number } | null>(null)
+
+  // ── Discord voice diagnostics ──
+  const [discordDiag, setDiscordDiag] = useState<any>(null)
+  const [discordTesting, setDiscordTesting] = useState(false)
+  const runDiscordTest = async () => {
+    setDiscordTesting(true)
+    try {
+      const [s, t] = await Promise.all([api.get('/admin/discord/status'), api.post('/admin/discord/test')])
+      setDiscordDiag({ status: s.data, test: t.data })
+    } catch (e: any) {
+      setDiscordDiag({ error: e?.response?.data?.message || 'Ошибка запроса' })
+    } finally { setDiscordTesting(false) }
+  }
 
   // ── Auth guard ──
   useEffect(() => {
@@ -377,43 +406,53 @@ export default function AdminPage() {
       await api.post(`/admin/kd/${id}/reset`)
       setKdResetId('')
       loadKd()
-      alert(`✅ KD матча #${id} сброшен, он снова появится в очереди`)
+      alert(`KD матча #${id} сброшен, он снова появится в очереди`)
     } catch (e: any) {
       alert(e?.response?.data?.message || 'Ошибка')
     }
   }
 
-  const loadSupportChats = async () => {
+  const loadTickets = async (status: 'open' | 'closed' = ticketFilter) => {
     try {
-      const [chatsRes, unreadRes] = await Promise.all([
-        api.get('/support/admin/chats'),
+      const [listRes, unreadRes] = await Promise.all([
+        api.get(`/support/admin/tickets?status=${status}`),
         api.get('/support/admin/unread'),
       ])
-      setSupportChats(chatsRes.data)
+      setTickets(listRes.data)
       setSupportUnread(unreadRes.data)
     } catch {}
   }
 
-  const loadChat = async (userId: number) => {
+  const loadTicket = async (id: number) => {
     try {
-      const r = await api.get(`/support/admin/chats/${userId}`)
-      setChatMessages(r.data)
-      setSupportChats(prev => prev.map(c => c.userId === userId ? { ...c, unread: 0 } : c))
-      setSupportUnread(prev => Math.max(0, prev - (supportChats.find(c => c.userId === userId)?.unread ?? 0)))
+      const r = await api.get(`/support/admin/tickets/${id}`)
+      setChatMessages(r.data.messages)
+      setActiveTicket(r.data.ticket)
+      setTickets(prev => prev.map(c => c.id === id ? { ...c, unread: 0 } : c))
       setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
     } catch {}
   }
 
   const sendReply = async () => {
-    if (!replyText.trim() || !openChatUserId || replySending) return
+    if (!replyText.trim() || !openTicketId || replySending) return
     setReplySending(true)
     try {
-      await api.post('/support/admin/reply', { userId: openChatUserId, text: replyText.trim() })
+      await api.post(`/support/admin/tickets/${openTicketId}/reply`, { text: replyText.trim() })
       setReplyText('')
-      await loadChat(openChatUserId)
-    } catch {} finally {
+      await loadTicket(openTicketId)
+    } catch (e: any) { alert(e?.response?.data?.message || 'Ошибка') } finally {
       setReplySending(false)
     }
+  }
+
+  const closeTicket = async () => {
+    if (!openTicketId) return
+    if (!confirm('Закрыть обращение? Игрок больше не сможет писать в него.')) return
+    try {
+      await api.post(`/support/admin/tickets/${openTicketId}/close`)
+      setOpenTicketId(null); setActiveTicket(null)
+      loadTickets()
+    } catch (e: any) { alert(e?.response?.data?.message || 'Ошибка') }
   }
 
   useEffect(() => {
@@ -425,7 +464,17 @@ export default function AdminPage() {
     if (tab === 'results') loadPendingResults()
     if (tab === 'reports') loadReports(reportFilter)
     if (tab === 'purchases') loadPurchases(purchaseFilter)
-    if (tab === 'support') { loadSupportChats(); setOpenChatUserId(null) }
+    if (tab === 'support') { loadTickets(ticketFilter); setOpenTicketId(null); setActiveTicket(null) }
+  }, [tab, user, ticketFilter])
+
+  // Live-poll the invite code while the tab is open (updates code + used status every second)
+  useEffect(() => {
+    if (tab !== 'invite' || !user?.isAdmin) return
+    let alive = true
+    const fetchCode = () => api.get('/invite/admin/current').then(r => { if (alive) setInvite(r.data) }).catch(() => {})
+    fetchCode()
+    const t = setInterval(fetchCode, 1000)
+    return () => { alive = false; clearInterval(t) }
   }, [tab, user])
 
   // Poll support unread count
@@ -440,12 +489,12 @@ export default function AdminPage() {
     return () => clearInterval(t)
   }, [user])
 
-  // Poll open chat
+  // Poll open ticket
   useEffect(() => {
-    if (!openChatUserId) return
-    const t = setInterval(() => loadChat(openChatUserId), 4000)
+    if (!openTicketId) return
+    const t = setInterval(() => loadTicket(openTicketId), 4000)
     return () => clearInterval(t)
-  }, [openChatUserId])
+  }, [openTicketId])
 
   // Poll active test lobby while on "create" tab
   useEffect(() => {
@@ -508,6 +557,29 @@ export default function AdminPage() {
     await api.patch(`/admin/users/${id}/moderator`, { isModerator: !current })
     loadUsers(userPage, userSearch)
   }
+  const toggleVerified = async (id: number, current: boolean) => {
+    if (!confirm(current ? 'Снять верификацию?' : 'Выдать значок верификации?')) return
+    await api.patch(`/admin/users/${id}/verified`, { isVerified: !current })
+    loadUsers(userPage, userSearch)
+  }
+  const toggleDmHost = async (id: number, current: boolean) => {
+    if (!confirm(current ? 'Снять роль DM Хост?' : 'Выдать скрытую роль DM Хост?')) return
+    await api.patch(`/admin/users/${id}/dm-host`, { isDmHost: !current })
+    loadUsers(userPage, userSearch)
+  }
+  const toggleCplAccess = async (id: number, current: boolean) => {
+    if (!confirm(current ? 'Убрать доступ к CPL?' : 'Выдать доступ к CPL?')) return
+    await api.patch(`/admin/users/${id}/cpl-access`, { value: !current })
+    loadUsers(userPage, userSearch)
+  }
+  const toggleCplqAccess = async (id: number, current: boolean) => {
+    if (!confirm(current ? 'Убрать доступ к CPL-Q?' : 'Выдать доступ к CPL-Q?')) return
+    await api.patch(`/admin/users/${id}/cplq-access`, { value: !current })
+    loadUsers(userPage, userSearch)
+  }
+  const cplSeasonStart = async () => { if (!confirm('Запустить новый сезон CPL?')) return; await api.post('/cpl/admin/season/start'); alert('Сезон запущен') }
+  const cplSeasonStop = async () => { if (!confirm('Остановить текущий сезон CPL?')) return; await api.post('/cpl/admin/season/stop'); alert('Сезон остановлен') }
+  const cplRecalc = async () => { try { const r = await api.post('/cpl/admin/recalc'); alert('Пересчёт выполнен: ' + JSON.stringify(r.data)) } catch (e: any) { alert(e?.response?.data?.message || 'Ошибка') } }
   const saveCoins = async (userId: number, amount: number) => {
     if (isNaN(amount)) return
     await api.patch(`/admin/users/${userId}/coins`, { amount })
@@ -569,9 +641,8 @@ export default function AdminPage() {
     if (!title) return
     const goal = parseInt(prompt('Цель:') || '1')
     const rewardCoins = parseInt(prompt('Награда монеты:') || '50')
-    const rewardXp = parseInt(prompt('Награда XP:') || '100')
     const missionKey = prompt('Ключ (wins/kills/matches):') || 'matches'
-    await api.post('/admin/missions', { title, description: title, type: 'daily', goal, rewardCoins, rewardXp, missionKey })
+    await api.post('/admin/missions', { title, description: title, type: 'daily', goal, rewardCoins, missionKey })
     alert('Задание создано!')
   }
   const createShopItem = async () => {
@@ -627,7 +698,7 @@ export default function AdminPage() {
       {/* Tab bar */}
       <div style={{ padding: '14px 16px 0', display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2 }}>
         {TABS.map((t) => {
-          const badgeCount = t.badge ? t.badge(stats, supportUnread) : 0
+          const badgeCount = (t as any).badge ? (t as any).badge(stats, supportUnread) : 0
           return (
             <motion.button
               key={t.id}
@@ -640,9 +711,10 @@ export default function AdminPage() {
                 background: tab === t.id ? '#E8092E' : 'rgba(255,255,255,0.06)',
                 color: tab === t.id ? '#fff' : '#aaa',
                 transition: 'background 0.2s',
+                display: 'inline-flex', alignItems: 'center', gap: 5,
               }}
             >
-              {t.label}
+              <Icon name={t.icon} size={13} />{t.label}
               {badgeCount > 0 && (
                 <span style={{
                   position: 'absolute', top: -4, right: -4,
@@ -679,11 +751,11 @@ export default function AdminPage() {
             </div>
 
             <div style={{ ...card }}>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>🏆 Топ 5 игроков</div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 7 }}><Icon name="trophy" size={14} color="#EAB308" />Топ 5 игроков</div>
               {stats.topPlayers.map((p, i) => (
                 <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: i < 4 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
-                  <span style={{ fontSize: 16, width: 20, textAlign: 'center' }}>
-                    {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`}
+                  <span style={{ width: 20, textAlign: 'center', display: 'inline-flex', justifyContent: 'center' }}>
+                    {i <= 2 ? <Icon name="medal" size={16} color={i === 0 ? '#FFD700' : i === 1 ? '#C0C0C0' : '#CD7F32'} /> : <span style={{ fontSize: 13, color: '#666' }}>{i+1}.</span>}
                   </span>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 600 }}>{p.gameNickname || p.firstName}</div>
@@ -699,6 +771,18 @@ export default function AdminPage() {
         {/* ── USERS TAB ── */}
         {tab === 'users' && (
           <div>
+            {/* CPL Season controls */}
+            <div style={{ marginBottom: 12, padding: 12, borderRadius: 12, background: 'rgba(232,9,46,0.06)', border: '1px solid rgba(232,9,46,0.25)' }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: '#E8092E', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Icon name="trophy" size={14} color="#E8092E" /> CPL · Сезон
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                <button onClick={cplSeasonStart} style={{ ...btnSm('#22C55E', 'rgba(34,197,94,0.12)'), display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="rocket" size={12} />Запустить сезон</button>
+                <button onClick={cplSeasonStop} style={{ ...btnSm('#EF4444', 'rgba(239,68,68,0.12)'), display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="ban" size={12} />Остановить</button>
+                <button onClick={cplRecalc} style={{ ...btnSm('#60A5FA', 'rgba(96,165,250,0.12)'), display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="refresh" size={12} />Пересчитать неделю</button>
+              </div>
+              <div style={{ fontSize: 10.5, color: '#6B7280', marginTop: 8, lineHeight: 1.4 }}>Доступ к лигам выдаётся кнопками CPL / CPL-Q у игроков ниже. «Пересчитать» — начисляет Weekly/Season Points и применяет вылеты по текущей неделе (для теста; автоматически идёт по понедельникам).</div>
+            </div>
             <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
               <input
                 value={userSearch}
@@ -712,9 +796,9 @@ export default function AdminPage() {
               />
               <button
                 onClick={() => loadUsers(1, userSearch)}
-                style={{ ...btnSm('#fff', 'rgba(255,255,255,0.1)'), padding: '8px 14px', fontSize: 13 }}
+                style={{ ...btnSm('#fff', 'rgba(255,255,255,0.1)'), padding: '8px 14px', fontSize: 13, display: 'inline-flex', alignItems: 'center' }}
               >
-                🔍
+                <Icon name="search" size={15} />
               </button>
             </div>
             <div style={{ fontSize: 12, color: '#555', marginBottom: 8 }}>Всего: {userTotal}</div>
@@ -730,8 +814,8 @@ export default function AdminPage() {
                         <span style={{ fontWeight: 700, fontSize: 14 }}>
                           {u.gameNickname || u.firstName}
                         </span>
-                        {u.isAdmin && <span style={{ marginLeft: 6, fontSize: 12 }}>👑</span>}
-                        {u.isBanned && <span style={{ marginLeft: 4, fontSize: 12 }}>🚫</span>}
+                        {u.isAdmin && <Icon name="crown" size={12} color="#EAB308" style={{ marginLeft: 6 }} />}
+                        {u.isBanned && <Icon name="ban" size={12} color="#EF4444" style={{ marginLeft: 4 }} />}
                         {u.username && (
                           <span style={{ marginLeft: 6, fontSize: 11, color: '#555' }}>@{u.username}</span>
                         )}
@@ -741,7 +825,7 @@ export default function AdminPage() {
 
                     <div style={{ display: 'flex', gap: 12, fontSize: 12, color: '#888', marginBottom: 8 }}>
                       <span>ELO: <b style={{ color: '#fff' }}>{u.elo}</b></span>
-                      <span>💰 <b style={{ color: '#fff' }}>{u.coins}</b></span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="coins" size={12} color="#EAB308" /><b style={{ color: '#fff' }}>{u.coins}</b></span>
                       <span>Матчей: <b style={{ color: '#fff' }}>{u.matchesPlayed}</b></span>
                       {(u.warns ?? 0) > 0 && (
                         <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
@@ -760,13 +844,13 @@ export default function AdminPage() {
                     {(u.gameId || u.deviceSerial) && (
                       <div style={{ display: 'flex', gap: 10, fontSize: 11, color: '#666', marginBottom: 6, flexWrap: 'wrap' }}>
                         {u.gameId && (
-                          <span>
-                            🎮 Game ID: <b style={{ color: '#aaa', userSelect: 'all' }}>{u.gameId}</b>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            <Icon name="gamepad" size={12} />Game ID: <b style={{ color: '#aaa', userSelect: 'all' }}>{u.gameId}</b>
                           </span>
                         )}
                         {u.deviceSerial && (
-                          <span>
-                            📱 Serial: <b style={{ color: '#aaa', userSelect: 'all', fontFamily: 'monospace' }}>{u.deviceSerial}</b>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            <Icon name="phone" size={12} />Serial: <b style={{ color: '#aaa', userSelect: 'all', fontFamily: 'monospace' }}>{u.deviceSerial}</b>
                           </span>
                         )}
                       </div>
@@ -779,39 +863,63 @@ export default function AdminPage() {
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       <button
                         onClick={() => setEditPopover({ userId: u.id, type: 'elo', label: `ELO для ${u.gameNickname || u.firstName}` })}
-                        style={btnSm('#A855F7')}
+                        style={{ ...btnSm('#A855F7'), display: 'inline-flex', alignItems: 'center', gap: 4 }}
                       >
-                        ✏️ ELO
+                        <Icon name="pencil" size={12} />ELO
                       </button>
                       <button
                         onClick={() => setEditPopover({ userId: u.id, type: 'coins', label: `Монеты (+ или -) для ${u.gameNickname || u.firstName}` })}
-                        style={btnSm('#EAB308')}
+                        style={{ ...btnSm('#EAB308'), display: 'inline-flex', alignItems: 'center', gap: 4 }}
                       >
-                        💰 Монеты
+                        <Icon name="coins" size={12} />Монеты
                       </button>
                       <button
                         onClick={() => toggleAdmin(u.id, u.isAdmin)}
-                        style={btnSm(u.isAdmin ? '#EAB308' : '#aaa')}
+                        style={{ ...btnSm(u.isAdmin ? '#EAB308' : '#aaa'), display: 'inline-flex', alignItems: 'center', gap: 4 }}
                       >
-                        {u.isAdmin ? '👑 Снять' : '👑 Адм'}
+                        <Icon name="crown" size={12} />{u.isAdmin ? 'Снять' : 'Адм'}
                       </button>
                       <button
                         onClick={() => toggleModerator(u.id, u.isModerator)}
-                        style={btnSm(u.isModerator ? '#A855F7' : '#aaa')}
+                        style={{ ...btnSm(u.isModerator ? '#A855F7' : '#aaa'), display: 'inline-flex', alignItems: 'center', gap: 4 }}
                       >
-                        {u.isModerator ? '🛡️ Снять' : '🛡️ Мод'}
+                        <Icon name="shield" size={12} />{u.isModerator ? 'Снять' : 'Мод'}
+                      </button>
+                      <button
+                        onClick={() => toggleVerified(u.id, u.isVerified)}
+                        style={{ ...btnSm(u.isVerified ? '#3B82F6' : '#aaa'), display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                      >
+                        <Icon name="verified" size={12} color={u.isVerified ? '#3B82F6' : '#aaa'} />{u.isVerified ? 'Снять вериф.' : 'Верифик.'}
+                      </button>
+                      <button
+                        onClick={() => toggleDmHost(u.id, !!u.isDmHost)}
+                        style={{ ...btnSm(u.isDmHost ? '#F97316' : '#aaa'), display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                      >
+                        <Icon name="flame" size={12} color={u.isDmHost ? '#F97316' : '#aaa'} />{u.isDmHost ? 'Снять DM Host' : 'DM Host'}
+                      </button>
+                      <button
+                        onClick={() => toggleCplqAccess(u.id, !!u.cplqAccess)}
+                        style={{ ...btnSm(u.cplqAccess ? '#F59E0B' : '#aaa'), display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                      >
+                        <Icon name="trophy" size={12} color={u.cplqAccess ? '#F59E0B' : '#aaa'} />{u.cplqAccess ? 'CPL-Q ✓' : 'CPL-Q'}
+                      </button>
+                      <button
+                        onClick={() => toggleCplAccess(u.id, !!u.cplAccess)}
+                        style={{ ...btnSm(u.cplAccess ? '#E8092E' : '#aaa'), display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                      >
+                        <Icon name="trophy" size={12} color={u.cplAccess ? '#E8092E' : '#aaa'} />{u.cplAccess ? 'CPL ✓' : 'CPL'}
                       </button>
                       {u.isBanned ? (
-                        <button onClick={() => unban(u.id)} style={btnSm('#22C55E')}>✅ Разбан</button>
+                        <button onClick={() => unban(u.id)} style={{ ...btnSm('#22C55E'), display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="check" size={12} />Разбан</button>
                       ) : (
-                        <button onClick={() => ban(u.id)} style={btnSm('#EF4444')}>🚫 Бан</button>
+                        <button onClick={() => ban(u.id)} style={{ ...btnSm('#EF4444'), display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="ban" size={12} />Бан</button>
                       )}
-                      <button onClick={() => warn(u.id)} style={btnSm('#F59E0B')}>⚠️ Варн</button>
+                      <button onClick={() => warn(u.id)} style={{ ...btnSm('#F59E0B'), display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="warning" size={12} />Варн</button>
                       {(u.warns ?? 0) > 0 && (
-                        <button onClick={() => unwarn(u.id)} style={btnSm('#6B7280')}>↩ Снять варн</button>
+                        <button onClick={() => unwarn(u.id)} style={{ ...btnSm('#6B7280'), display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="refresh" size={12} />Снять варн</button>
                       )}
-                      <button onClick={() => applyLeavePenalty(u.id, u.gameNickname || u.firstName)} style={btnSm('#EF4444', 'rgba(239,68,68,0.12)')}>🚪 Leave</button>
-                      <button onClick={() => resetStats(u.id)} style={btnSm('#6366F1', 'rgba(99,102,241,0.12)')}>🔄 Сброс стата</button>
+                      <button onClick={() => applyLeavePenalty(u.id, u.gameNickname || u.firstName)} style={{ ...btnSm('#EF4444', 'rgba(239,68,68,0.12)'), display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="logout" size={12} />Leave</button>
+                      <button onClick={() => resetStats(u.id)} style={{ ...btnSm('#6366F1', 'rgba(99,102,241,0.12)'), display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="refresh" size={12} />Сброс стата</button>
                     </div>
                   </div>
                 ))}
@@ -880,8 +988,8 @@ export default function AdminPage() {
             {loading.results ? (
               <div style={{ textAlign: 'center', color: '#555', padding: 40 }}>Загрузка...</div>
             ) : pendingResults.length === 0 ? (
-              <div style={{ textAlign: 'center', color: '#444', padding: 40, fontSize: 14 }}>
-                ✅ Все результаты подтверждены
+              <div style={{ color: '#444', padding: 40, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+                <Icon name="check-circle" size={16} />Все результаты подтверждены
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -894,8 +1002,8 @@ export default function AdminPage() {
                       <span style={{ fontWeight: 700 }}>Матч #{m.id}</span>
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                         {m.isDisputed && (
-                          <span style={{ fontSize: 11, fontWeight: 800, color: '#EF4444', background: 'rgba(239,68,68,0.15)', padding: '2px 8px', borderRadius: 20 }}>
-                            ⚠️ СПОР
+                          <span style={{ fontSize: 11, fontWeight: 800, color: '#EF4444', background: 'rgba(239,68,68,0.15)', padding: '2px 8px', borderRadius: 20, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            <Icon name="warning" size={11} />СПОР
                           </span>
                         )}
                         <span style={{ fontSize: 12, color: '#aaa' }}>{m.map}</span>
@@ -946,17 +1054,17 @@ export default function AdminPage() {
                       {m.resultScreenshotA && (
                         <button
                           onClick={() => setScreenshot(m.resultScreenshotA!)}
-                          style={{ flex: 1, background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: 8, padding: '6px 0', color: '#3B82F6', fontSize: 12, cursor: 'pointer' }}
+                          style={{ flex: 1, background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: 8, padding: '6px 0', color: '#3B82F6', fontSize: 12, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}
                         >
-                          📸 Скрин кап. A {m.isDisputed ? `(${m.scoreAByCapA}:${m.scoreBByCapA})` : ''}
+                          <Icon name="camera" size={13} />Скрин кап. A {m.isDisputed ? `(${m.scoreAByCapA}:${m.scoreBByCapA})` : ''}
                         </button>
                       )}
                       {m.resultScreenshotB && (
                         <button
                           onClick={() => setScreenshot(m.resultScreenshotB!)}
-                          style={{ flex: 1, background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '6px 0', color: '#EF4444', fontSize: 12, cursor: 'pointer' }}
+                          style={{ flex: 1, background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '6px 0', color: '#EF4444', fontSize: 12, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}
                         >
-                          📸 Скрин кап. B {m.isDisputed ? `(${m.scoreAByCapB}:${m.scoreBByCapB})` : ''}
+                          <Icon name="camera" size={13} />Скрин кап. B {m.isDisputed ? `(${m.scoreAByCapB}:${m.scoreBByCapB})` : ''}
                         </button>
                       )}
                     </div>
@@ -976,7 +1084,7 @@ export default function AdminPage() {
                             opacity: loading[`result_${m.id}`] ? 0.5 : 1,
                           }}
                         >
-                          {w === 'A' ? '🔵 Победа A' : w === 'B' ? '🔴 Победа B' : '🤝 Ничья'}
+                          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>{w === 'A' ? <><Icon name="dot" size={11} />Победа A</> : w === 'B' ? <><Icon name="dot" size={11} />Победа B</> : <><Icon name="handshake" size={13} />Ничья</>}</span>
                         </button>
                       ))}
                     </div>
@@ -991,7 +1099,7 @@ export default function AdminPage() {
         {tab === 'reports' && (
           <div>
             <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
-              {[['', 'Все'], ['pending', '⏳ Новые'], ['reviewed', '✅ Просмотрено'], ['dismissed', '🚫 Отклонено']].map(([val, label]) => (
+              {([['', null, 'Все'], ['pending', 'hourglass', 'Новые'], ['reviewed', 'check-circle', 'Просмотрено'], ['dismissed', 'ban', 'Отклонено']] as [string, IconName | null, string][]).map(([val, icon, label]) => (
                 <button
                   key={val}
                   onClick={() => { setReportFilter(val); loadReports(val) }}
@@ -999,9 +1107,10 @@ export default function AdminPage() {
                     padding: '5px 12px', borderRadius: 16, border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer',
                     background: reportFilter === val ? '#E8092E' : 'rgba(255,255,255,0.06)',
                     color: reportFilter === val ? '#fff' : '#aaa',
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
                   }}
                 >
-                  {label}
+                  {icon && <Icon name={icon} size={12} />}{label}
                 </button>
               ))}
             </div>
@@ -1033,8 +1142,8 @@ export default function AdminPage() {
                     </div>
                     {r.status === 'pending' && (
                       <div style={{ display: 'flex', gap: 6 }}>
-                        <button onClick={() => updateReport(r.id, 'reviewed')} style={btnSm('#22C55E')}>✅ Просмотрено</button>
-                        <button onClick={() => updateReport(r.id, 'dismissed')} style={btnSm('#6B7280')}>🚫 Отклонить</button>
+                        <button onClick={() => updateReport(r.id, 'reviewed')} style={{ ...btnSm('#22C55E'), display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="check" size={12} />Просмотрено</button>
+                        <button onClick={() => updateReport(r.id, 'dismissed')} style={{ ...btnSm('#6B7280'), display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="ban" size={12} />Отклонить</button>
                       </div>
                     )}
                   </div>
@@ -1048,7 +1157,7 @@ export default function AdminPage() {
         {tab === 'purchases' && (
           <div>
             <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
-              {[['pending', '⏳ Ожидают'], ['confirmed', '✅ Подтверждено'], ['rejected', '❌ Отклонено'], ['', 'Все']].map(([val, label]) => (
+              {([['pending', 'hourglass', 'Ожидают'], ['confirmed', 'check-circle', 'Подтверждено'], ['rejected', 'x', 'Отклонено'], ['', null, 'Все']] as [string, IconName | null, string][]).map(([val, icon, label]) => (
                 <button
                   key={val}
                   onClick={() => { setPurchaseFilter(val); loadPurchases(val) }}
@@ -1056,9 +1165,10 @@ export default function AdminPage() {
                     padding: '5px 12px', borderRadius: 16, border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer',
                     background: purchaseFilter === val ? '#E8092E' : 'rgba(255,255,255,0.06)',
                     color: purchaseFilter === val ? '#fff' : '#aaa',
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
                   }}
                 >
-                  {label}
+                  {icon && <Icon name={icon} size={12} />}{label}
                 </button>
               ))}
             </div>
@@ -1079,11 +1189,11 @@ export default function AdminPage() {
                       <span style={pill(p.status)}>{p.status}</span>
                     </div>
                     <div style={{ display: 'flex', gap: 16, fontSize: 13, marginBottom: 6 }}>
-                      <span>💵 <b style={{ color: '#fff' }}>{p.rubles} ₽</b></span>
-                      <span>🪙 <b style={{ color: '#EAB308' }}>+{p.coins}</b></span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="coins" size={13} color="#888" /><b style={{ color: '#fff' }}>{p.rubles} ₽</b></span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="coins" size={13} color="#EAB308" /><b style={{ color: '#EAB308' }}>+{p.coins}</b></span>
                     </div>
-                    <div style={{ fontSize: 12, color: '#666', marginBottom: p.status === 'pending' ? 8 : 0 }}>
-                      👤 {p.payerName} · 🏦 {p.bank}<br />
+                    <div style={{ fontSize: 12, color: '#666', marginBottom: p.status === 'pending' ? 8 : 0, display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                      <Icon name="user" size={12} />{p.payerName} · <Icon name="bank" size={12} />{p.bank}<br />
                       {new Date(p.createdAt).toLocaleString('ru-RU')}
                     </div>
                     {p.status === 'pending' && (
@@ -1091,16 +1201,16 @@ export default function AdminPage() {
                         <button
                           onClick={() => confirmPurchase(p.id)}
                           disabled={loading[`purchase_${p.id}`]}
-                          style={{ ...btnSm('#22C55E'), opacity: loading[`purchase_${p.id}`] ? 0.5 : 1 }}
+                          style={{ ...btnSm('#22C55E'), opacity: loading[`purchase_${p.id}`] ? 0.5 : 1, display: 'inline-flex', alignItems: 'center', gap: 4 }}
                         >
-                          ✅ Подтвердить
+                          <Icon name="check" size={12} />Подтвердить
                         </button>
                         <button
                           onClick={() => rejectPurchase(p.id)}
                           disabled={loading[`purchase_${p.id}`]}
-                          style={{ ...btnSm('#EF4444'), opacity: loading[`purchase_${p.id}`] ? 0.5 : 1 }}
+                          style={{ ...btnSm('#EF4444'), opacity: loading[`purchase_${p.id}`] ? 0.5 : 1, display: 'inline-flex', alignItems: 'center', gap: 4 }}
                         >
-                          ❌ Отклонить
+                          <Icon name="x" size={12} />Отклонить
                         </button>
                       </div>
                     )}
@@ -1115,21 +1225,33 @@ export default function AdminPage() {
         {tab === 'create' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={card}>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>🎯 Задания</div>
+              <div style={{ fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 7 }}><Icon name="mic" size={15} />Discord — голосовые каналы</div>
+              <div style={{ fontSize: 12, color: '#666', marginBottom: 10 }}>Проверка, почему не создаются голосовые комнаты матчей. Создаст и сразу удалит тестовый канал.</div>
+              <button onClick={runDiscordTest} disabled={discordTesting} style={{ width: '100%', background: '#5865F222', border: '1px solid #5865F244', borderRadius: 8, padding: '10px 0', color: '#818cf8', fontWeight: 700, cursor: discordTesting ? 'default' : 'pointer', fontSize: 13, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                <Icon name="mic" size={14} />{discordTesting ? 'Проверяем…' : 'Проверить Discord'}
+              </button>
+              {discordDiag && (
+                <pre style={{ marginTop: 10, padding: 12, borderRadius: 8, background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.08)', fontSize: 11, color: '#9CA3AF', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.5, maxHeight: 320, overflowY: 'auto' }}>
+                  {JSON.stringify(discordDiag, null, 2)}
+                </pre>
+              )}
+            </div>
+            <div style={card}>
+              <div style={{ fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 7 }}><Icon name="target" size={15} />Задания</div>
               <div style={{ fontSize: 12, color: '#666', marginBottom: 10 }}>Ежедневные и еженедельные задания для игроков</div>
-              <button onClick={createMission} style={{ width: '100%', background: '#E8092E22', border: '1px solid #E8092E44', borderRadius: 8, padding: '10px 0', color: '#E8092E', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>
-                ➕ Создать задание
+              <button onClick={createMission} style={{ width: '100%', background: '#E8092E22', border: '1px solid #E8092E44', borderRadius: 8, padding: '10px 0', color: '#E8092E', fontWeight: 700, cursor: 'pointer', fontSize: 13, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                <Icon name="plus" size={14} />Создать задание
               </button>
             </div>
             <div style={card}>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>🛒 Магазин</div>
+              <div style={{ fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 7 }}><Icon name="cart" size={15} />Магазин</div>
               <div style={{ fontSize: 12, color: '#666', marginBottom: 10 }}>Добавить товар в магазин (скины, бусты, премиум)</div>
-              <button onClick={createShopItem} style={{ width: '100%', background: '#EAB30822', border: '1px solid #EAB30844', borderRadius: 8, padding: '10px 0', color: '#EAB308', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>
-                ➕ Добавить товар
+              <button onClick={createShopItem} style={{ width: '100%', background: '#EAB30822', border: '1px solid #EAB30844', borderRadius: 8, padding: '10px 0', color: '#EAB308', fontWeight: 700, cursor: 'pointer', fontSize: 13, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                <Icon name="plus" size={14} />Добавить товар
               </button>
             </div>
             <div style={{ ...card, border: testLobby ? '1px solid rgba(168,85,247,0.4)' : '1px solid rgba(255,255,255,0.08)' }}>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>🧪 Тестовое лобби 2v2</div>
+              <div style={{ fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 7 }}><Icon name="flask" size={15} />Тестовое лобби 2v2</div>
               <div style={{ fontSize: 12, color: '#666', marginBottom: 12 }}>
                 До 4 админов играют вместе без очереди
               </div>
@@ -1168,10 +1290,10 @@ export default function AdminPage() {
                     </div>
                     {/* Team labels */}
                     <div style={{ display: 'flex', fontSize: 10, color: '#555' }}>
-                      <span style={{ flex: 1, textAlign: 'center' }}>🔵 A</span>
-                      <span style={{ flex: 1, textAlign: 'center' }}>🔵 A</span>
-                      <span style={{ flex: 1, textAlign: 'center' }}>🔴 B</span>
-                      <span style={{ flex: 1, textAlign: 'center' }}>🔴 B</span>
+                      <span style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}><Icon name="dot" size={9} color="#3B82F6" />A</span>
+                      <span style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}><Icon name="dot" size={9} color="#3B82F6" />A</span>
+                      <span style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}><Icon name="dot" size={9} color="#EF4444" />B</span>
+                      <span style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}><Icon name="dot" size={9} color="#EF4444" />B</span>
                     </div>
                   </div>
 
@@ -1179,9 +1301,9 @@ export default function AdminPage() {
                   {testLobby.players.some((p) => p.id === user?.id) ? (
                     <button
                       onClick={() => router.push(`/match/${testLobby.matchId}`)}
-                      style={{ width: '100%', background: '#A855F7', border: 'none', borderRadius: 8, padding: '10px 0', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}
+                      style={{ width: '100%', background: '#A855F7', border: 'none', borderRadius: 8, padding: '10px 0', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
                     >
-                      👁 Открыть лобби
+                      <Icon name="eye" size={14} />Открыть лобби
                     </button>
                   ) : (
                     <button
@@ -1197,9 +1319,9 @@ export default function AdminPage() {
                           setTestLoading(false)
                         }
                       }}
-                      style={{ width: '100%', background: '#A855F7', border: 'none', borderRadius: 8, padding: '10px 0', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13, opacity: testLoading ? 0.6 : 1 }}
+                      style={{ width: '100%', background: '#A855F7', border: 'none', borderRadius: 8, padding: '10px 0', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 13, opacity: testLoading ? 0.6 : 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
                     >
-                      🚀 Войти в лобби
+                      <Icon name="rocket" size={14} />Войти в лобби
                     </button>
                   )}
                 </>
@@ -1217,9 +1339,9 @@ export default function AdminPage() {
                       setTestLoading(false)
                     }
                   }}
-                  style={{ width: '100%', background: '#A855F722', border: '1px solid #A855F744', borderRadius: 8, padding: '10px 0', color: '#A855F7', fontWeight: 700, cursor: 'pointer', fontSize: 13, opacity: testLoading ? 0.6 : 1 }}
+                  style={{ width: '100%', background: '#A855F722', border: '1px solid #A855F744', borderRadius: 8, padding: '10px 0', color: '#A855F7', fontWeight: 700, cursor: 'pointer', fontSize: 13, opacity: testLoading ? 0.6 : 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
                 >
-                  🧪 Создать тест-лобби 2v2
+                  <Icon name="flask" size={14} />Создать тест-лобби 2v2
                 </button>
               )}
             </div>
@@ -1249,8 +1371,8 @@ export default function AdminPage() {
                   display: 'flex', alignItems: 'center', gap: 12,
                 }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 11, color: 'rgba(234,179,8,0.8)', fontWeight: 700, marginBottom: 4 }}>
-                      🔢 ВСЕГО РАУНДОВ В МАТЧЕ
+                    <div style={{ fontSize: 11, color: 'rgba(234,179,8,0.8)', fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <Icon name="hash" size={12} />ВСЕГО РАУНДОВ В МАТЧЕ
                     </div>
                     <div style={{ fontSize: 10, color: '#555' }}>Общее количество сыгранных раундов</div>
                   </div>
@@ -1274,14 +1396,14 @@ export default function AdminPage() {
                 <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
                   {activeKdMatch.resultScreenshotA && (
                     <button onClick={() => setScreenshot(activeKdMatch.resultScreenshotA!)}
-                      style={{ flex: 1, background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: 8, padding: '8px 0', color: '#3B82F6', fontSize: 12, cursor: 'pointer' }}>
-                      📸 Скрин A
+                      style={{ flex: 1, background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: 8, padding: '8px 0', color: '#3B82F6', fontSize: 12, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                      <Icon name="camera" size={13} />Скрин A
                     </button>
                   )}
                   {activeKdMatch.resultScreenshotB && (
                     <button onClick={() => setScreenshot(activeKdMatch.resultScreenshotB!)}
-                      style={{ flex: 1, background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '8px 0', color: '#EF4444', fontSize: 12, cursor: 'pointer' }}>
-                      📸 Скрин B
+                      style={{ flex: 1, background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '8px 0', color: '#EF4444', fontSize: 12, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                      <Icon name="camera" size={13} />Скрин B
                     </button>
                   )}
                 </div>
@@ -1352,7 +1474,7 @@ export default function AdminPage() {
                     cursor: 'pointer', opacity: loading[`kd_${activeKdMatch.id}`] ? 0.5 : 1,
                   }}
                 >
-                  {loading[`kd_${activeKdMatch.id}`] ? 'Сохранение...' : '✅ Сохранить K/D'}
+                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>{loading[`kd_${activeKdMatch.id}`] ? 'Сохранение...' : <><Icon name="check" size={15} />Сохранить K/D</>}</span>
                 </button>
               </div>
             ) : (
@@ -1364,8 +1486,8 @@ export default function AdminPage() {
                 {loading.kd ? (
                   <div style={{ textAlign: 'center', color: '#555', padding: 40 }}>Загрузка...</div>
                 ) : kdMatches.length === 0 ? (
-                  <div style={{ textAlign: 'center', color: '#444', padding: 40, fontSize: 14 }}>
-                    ✅ Все K/D заполнены
+                  <div style={{ color: '#444', padding: 40, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+                    <Icon name="check-circle" size={16} />Все K/D заполнены
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1407,8 +1529,8 @@ export default function AdminPage() {
                     background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)',
                     borderRadius: 10,
                   }}>
-                    <div style={{ fontSize: 11, color: '#EF4444', fontWeight: 700, marginBottom: 8 }}>
-                      🔄 Сброс KD (для исправления ошибок)
+                    <div style={{ fontSize: 11, color: '#EF4444', fontWeight: 700, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <Icon name="refresh" size={12} />Сброс KD (для исправления ошибок)
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
                       <input
@@ -1441,64 +1563,90 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Support tab */}
+        {/* Invite code tab */}
+        {tab === 'invite' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ ...card, textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
+              <div style={{ fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}><Icon name="lock" size={15} />Пригласительный код</div>
+              <div style={{ fontSize: 12, color: '#666', marginBottom: 18 }}>Закрытый тест · обновляется раз в минуту · один код = один игрок</div>
+              {invite ? (
+                <>
+                  <div style={{
+                    fontSize: 52, fontWeight: 900, letterSpacing: '0.16em', lineHeight: 1,
+                    fontFamily: 'ui-monospace, monospace',
+                    color: invite.used ? '#6B7280' : '#fff',
+                    textShadow: invite.used ? 'none' : '0 0 26px rgba(232,9,46,0.5)',
+                    textDecoration: invite.used ? 'line-through' : 'none',
+                  }}>{invite.code}</div>
+
+                  <div style={{
+                    marginTop: 14, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 20,
+                    fontSize: 12, fontWeight: 800,
+                    background: invite.used ? 'rgba(239,68,68,0.12)' : 'rgba(34,197,94,0.12)',
+                    border: `1px solid ${invite.used ? 'rgba(239,68,68,0.3)' : 'rgba(34,197,94,0.3)'}`,
+                    color: invite.used ? '#EF4444' : '#22C55E',
+                  }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: invite.used ? '#EF4444' : '#22C55E' }} />
+                    {invite.used ? 'Уже использован' : 'Свободен'}
+                  </div>
+
+                  <div style={{ marginTop: 18 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#666', marginBottom: 6 }}>
+                      <span>Новый код через</span>
+                      <span style={{ fontWeight: 800, color: '#fff', fontVariantNumeric: 'tabular-nums' }}>{invite.secondsLeft}с</span>
+                    </div>
+                    <div style={{ height: 6, background: 'rgba(255,255,255,0.07)', borderRadius: 3, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${(invite.secondsLeft / 60) * 100}%`, background: 'linear-gradient(90deg, #E8092E, #ff5a72)', borderRadius: 3, transition: 'width 1s linear' }} />
+                    </div>
+                  </div>
+
+                  <button onClick={() => navigator.clipboard?.writeText(invite.code)} style={{ marginTop: 16, width: '100%', background: '#E8092E22', border: '1px solid #E8092E44', borderRadius: 8, padding: '10px 0', color: '#E8092E', fontWeight: 700, cursor: 'pointer', fontSize: 13, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                    <Icon name="copy" size={14} />Скопировать
+                  </button>
+                </>
+              ) : (
+                <div style={{ color: '#666', fontSize: 13, padding: '24px 0' }}>Загрузка…</div>
+              )}
+            </div>
+            <div style={{ ...card, fontSize: 12, color: '#888', lineHeight: 1.55 }}>
+              Передайте код игроку для входа в закрытый тест. Он действует до смены (раз в минуту) и только для одного человека — после использования становится недействительным до следующего обновления.
+            </div>
+          </div>
+        )}
+
+        {/* Support tab — tickets */}
         {tab === 'support' && (
           <div>
-            {!openChatUserId ? (
-              /* Chats list */
+            {!openTicketId ? (
               <div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>
-                  Обращения {supportUnread > 0 && <span style={{ color: '#E8092E' }}>· {supportUnread} новых</span>}
+                {/* status filter */}
+                <div style={{ display: 'inline-flex', gap: 6, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12, padding: 4, marginBottom: 14 }}>
+                  {([['open', 'Открытые'], ['closed', 'Закрытые']] as const).map(([k, l]) => (
+                    <button key={k} onClick={() => setTicketFilter(k)} style={{ padding: '8px 18px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 800, color: ticketFilter === k ? '#fff' : '#9CA3AF', background: ticketFilter === k ? '#E8092E' : 'transparent' }}>
+                      {l}{k === 'open' && supportUnread > 0 && <span style={{ marginLeft: 6, fontSize: 11 }}>· {supportUnread}</span>}
+                    </button>
+                  ))}
                 </div>
-                {supportChats.length === 0 ? (
-                  <div style={{ textAlign: 'center', color: '#4B5563', fontSize: 13, padding: '40px 0' }}>
-                    Нет обращений
-                  </div>
+                {tickets.length === 0 ? (
+                  <div style={{ textAlign: 'center', color: '#4B5563', fontSize: 13, padding: '40px 0' }}>Нет {ticketFilter === 'open' ? 'открытых' : 'закрытых'} обращений</div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {supportChats.map(chat => (
-                      <motion.div
-                        key={chat.userId}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => { setOpenChatUserId(chat.userId); loadChat(chat.userId) }}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 12,
-                          padding: '12px 14px', borderRadius: 12, cursor: 'pointer',
-                          background: chat.unread > 0 ? 'rgba(232,9,46,0.06)' : 'rgba(255,255,255,0.03)',
-                          border: chat.unread > 0 ? '1px solid rgba(232,9,46,0.2)' : '1px solid rgba(255,255,255,0.06)',
-                        }}
-                      >
-                        <div style={{
-                          width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
-                          background: 'rgba(255,255,255,0.1)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 16, overflow: 'hidden',
-                        }}>
-                          {chat.avatarUrl
-                            ? <img src={chat.avatarUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            : chat.displayName[0].toUpperCase()}
+                    {tickets.map(t => (
+                      <motion.div key={t.id} whileTap={{ scale: 0.99 }} onClick={() => { setOpenTicketId(t.id); loadTicket(t.id) }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 12, cursor: 'pointer', background: t.unread > 0 ? 'rgba(232,9,46,0.06)' : 'rgba(255,255,255,0.03)', border: t.unread > 0 ? '1px solid rgba(232,9,46,0.22)' : '1px solid rgba(255,255,255,0.06)' }}>
+                        <div style={{ width: 40, height: 40, borderRadius: '50%', flexShrink: 0, background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, overflow: 'hidden' }}>
+                          {t.avatarUrl ? <img src={t.avatarUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (t.displayName[0] || '?').toUpperCase()}
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 700, fontSize: 14, color: '#F3F4F6' }}>{chat.displayName}</div>
-                          <div style={{ fontSize: 12, color: '#6B7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {chat.lastMessage}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontWeight: 800, fontSize: 14, color: '#F3F4F6', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.subject}</span>
+                            <span style={{ fontSize: 9.5, fontWeight: 800, color: '#9CA3AF', background: 'rgba(255,255,255,0.06)', padding: '2px 7px', borderRadius: 20, flexShrink: 0 }}>{t.categoryLabel}</span>
                           </div>
+                          <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.displayName} · {t.lastMessage}</div>
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                          {chat.lastAt && (
-                            <div style={{ fontSize: 10, color: '#4B5563' }}>
-                              {new Date(chat.lastAt).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}
-                            </div>
-                          )}
-                          {chat.unread > 0 && (
-                            <div style={{
-                              background: '#E8092E', color: '#fff', borderRadius: 20,
-                              width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              fontSize: 11, fontWeight: 800,
-                            }}>
-                              {chat.unread}
-                            </div>
-                          )}
+                          {t.lastAt && <div style={{ fontSize: 10, color: '#4B5563' }}>{new Date(t.lastAt).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}</div>}
+                          {t.unread > 0 && <div style={{ background: '#E8092E', color: '#fff', borderRadius: 20, minWidth: 20, height: 20, padding: '0 6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800 }}>{t.unread}</div>}
                         </div>
                       </motion.div>
                     ))}
@@ -1506,88 +1654,41 @@ export default function AdminPage() {
                 )}
               </div>
             ) : (
-              /* Open chat */
-              <div style={{ display: 'flex', flexDirection: 'column', height: '65vh' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', height: '68vh' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-                  <button
-                    onClick={() => { setOpenChatUserId(null); loadSupportChats() }}
-                    style={{ background: 'none', border: 'none', color: '#6B7280', fontSize: 13, cursor: 'pointer', padding: 0 }}
-                  >
-                    ← Назад
-                  </button>
-                  <span style={{ fontWeight: 700, fontSize: 14, flex: 1 }}>
-                    {supportChats.find(c => c.userId === openChatUserId)?.displayName}
-                  </span>
-                  <button
-                    onClick={async () => {
-                      await api.delete(`/support/admin/chats/${openChatUserId}`)
-                      setChatMessages([])
-                      setOpenChatUserId(null)
-                      loadSupportChats()
-                    }}
-                    style={{
-                      background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)',
-                      borderRadius: 8, padding: '5px 10px', color: '#EF4444',
-                      fontSize: 11, fontWeight: 700, cursor: 'pointer',
-                    }}
-                  >
-                    ✕ Закрыть
-                  </button>
+                  <button onClick={() => { setOpenTicketId(null); setActiveTicket(null); loadTickets() }} style={{ background: 'none', border: 'none', color: '#6B7280', fontSize: 13, cursor: 'pointer', padding: 0 }}>← Назад</button>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 800, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeTicket?.subject || 'Обращение'}</div>
+                    <div style={{ fontSize: 11, color: '#6B7280' }}>{activeTicket?.displayName} · {activeTicket?.categoryLabel} · {activeTicket?.status === 'closed' ? 'закрыт' : 'открыт'}</div>
+                  </div>
+                  {activeTicket?.status !== 'closed' && (
+                    <button onClick={closeTicket} style={{ background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: 9, padding: '7px 12px', color: '#22C55E', fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                      <Icon name="check" size={13} color="#22C55E" />Закрыть тикет
+                    </button>
+                  )}
                 </div>
 
-                {/* Messages */}
                 <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
                   {chatMessages.map(msg => (
                     <div key={msg.id} style={{ display: 'flex', justifyContent: msg.isFromAdmin ? 'flex-end' : 'flex-start' }}>
-                      <div style={{
-                        maxWidth: '80%', padding: '9px 13px',
-                        borderRadius: msg.isFromAdmin ? '16px 4px 16px 16px' : '4px 16px 16px 16px',
-                        background: msg.isFromAdmin ? 'rgba(232,9,46,0.2)' : 'rgba(255,255,255,0.07)',
-                        border: msg.isFromAdmin ? '1px solid rgba(232,9,46,0.3)' : '1px solid rgba(255,255,255,0.08)',
-                      }}>
-                        {!msg.isFromAdmin && (
-                          <div style={{ fontSize: 10, fontWeight: 700, color: '#9CA3AF', marginBottom: 3 }}>
-                            Пользователь
-                          </div>
-                        )}
-                        <div style={{ fontSize: 13, color: '#F3F4F6', lineHeight: 1.5, wordBreak: 'break-word' }}>{msg.text}</div>
-                        <div style={{ fontSize: 10, color: '#6B7280', marginTop: 3, textAlign: 'right' }}>
-                          {new Date(msg.createdAt).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}
-                        </div>
+                      <div style={{ maxWidth: '80%', padding: '9px 13px', borderRadius: msg.isFromAdmin ? '16px 4px 16px 16px' : '4px 16px 16px 16px', background: msg.isFromAdmin ? 'rgba(232,9,46,0.2)' : 'rgba(255,255,255,0.07)', border: msg.isFromAdmin ? '1px solid rgba(232,9,46,0.3)' : '1px solid rgba(255,255,255,0.08)' }}>
+                        {!msg.isFromAdmin && <div style={{ fontSize: 10, fontWeight: 700, color: '#9CA3AF', marginBottom: 3 }}>Игрок</div>}
+                        <div style={{ fontSize: 13, color: '#F3F4F6', lineHeight: 1.5, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{msg.text}</div>
+                        <div style={{ fontSize: 10, color: '#6B7280', marginTop: 3, textAlign: 'right' }}>{new Date(msg.createdAt).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })}</div>
                       </div>
                     </div>
                   ))}
                   <div ref={chatBottomRef} />
                 </div>
 
-                {/* Reply input */}
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <input
-                    value={replyText}
-                    onChange={e => setReplyText(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') sendReply() }}
-                    placeholder="Написать ответ..."
-                    style={{
-                      flex: 1, background: 'rgba(255,255,255,0.07)',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      borderRadius: 10, padding: '10px 14px',
-                      color: '#F3F4F6', fontSize: 13, outline: 'none',
-                    }}
-                  />
-                  <button
-                    onClick={sendReply}
-                    disabled={!replyText.trim() || replySending}
-                    style={{
-                      background: replyText.trim() ? '#E8092E' : 'rgba(255,255,255,0.06)',
-                      border: 'none', borderRadius: 10, padding: '10px 16px',
-                      color: '#fff', fontSize: 13, fontWeight: 700,
-                      cursor: replyText.trim() ? 'pointer' : 'default',
-                      transition: 'background 0.2s',
-                    }}
-                  >
-                    {replySending ? '...' : '➤'}
-                  </button>
-                </div>
+                {activeTicket?.status === 'closed' ? (
+                  <div style={{ textAlign: 'center', fontSize: 12, color: '#6B7280', padding: '12px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}><Icon name="lock" size={13} color="#6B7280" />Тикет закрыт</div>
+                ) : (
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input value={replyText} onChange={e => setReplyText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') sendReply() }} placeholder="Ответ игроку…" style={{ flex: 1, background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '10px 14px', color: '#F3F4F6', fontSize: 13, outline: 'none' }} />
+                    <button onClick={sendReply} disabled={!replyText.trim() || replySending} style={{ background: replyText.trim() ? '#E8092E' : 'rgba(255,255,255,0.06)', border: 'none', borderRadius: 10, padding: '10px 16px', color: '#fff', fontSize: 13, fontWeight: 700, cursor: replyText.trim() ? 'pointer' : 'default', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{replySending ? '...' : <Icon name="chevronRight" size={15} />}</button>
+                  </div>
+                )}
               </div>
             )}
           </div>

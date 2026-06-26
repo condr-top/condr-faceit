@@ -35,9 +35,6 @@ export class MatchPlayer {
   @Column({ name: 'coins_earned', default: 0 })
   coinsEarned: number;
 
-  @Column({ name: 'xp_earned', default: 0 })
-  xpEarned: number;
-
   // Per-match calculated stats (filled after moderator submits KD)
   @Column({ name: 'kd_match', type: 'float', default: 0 })
   kdMatch: number;

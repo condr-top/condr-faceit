@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useQueueStore } from '@/store/queueStore'
+import { Icon } from '@/components/ui/Icon'
 
 export function QueueButton() {
   const { inQueue, joinQueue, leaveQueue } = useQueueStore()
@@ -56,8 +57,9 @@ export function QueueButton() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
+            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
           >
-            ⚔️ Найти матч 5v5
+            <Icon name="swords" size={18} />Найти матч 5v5
           </motion.div>
         )}
       </AnimatePresence>

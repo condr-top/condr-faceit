@@ -27,7 +27,9 @@ export default function AuthPage() {
     if (isRealTelegram) {
       login(initData).then((user: any) => redirect(user)).catch(() => {})
     } else {
-      login(null, 1145050367).then((user: any) => redirect(user)).catch(() => {})
+      // Не в Telegram (обычный браузер): есть токен → в приложение, иначе на вход сайта.
+      const token = localStorage.getItem('condr_faceit_token')
+      router.replace(token ? '/web' : '/web/login')
     }
   }, [])
 

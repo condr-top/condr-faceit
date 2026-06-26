@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like, In } from 'typeorm';
 import axios from 'axios';
@@ -12,11 +12,13 @@ import { Report, ReportStatus } from '../reports/entities/report.entity';
 import { CoinPurchase, PurchaseStatus } from '../coins/entities/coin-purchase.entity';
 import { Notification } from '../notifications/entities/notification.entity';
 import { AppGateway } from '../gateway/app.gateway';
+import { DiscordService } from '../discord/discord.service';
 import { MissionsService } from '../missions/missions.service';
 import { EloHistory } from '../users/entities/elo-history.entity';
+import { AppMeta } from './entities/app-meta.entity';
 
 @Injectable()
-export class AdminService {
+export class AdminService implements OnModuleInit {
   constructor(
     @InjectRepository(User) private userRepo: Repository<User>,
     @InjectRepository(Match) private matchRepo: Repository<Match>,
@@ -28,9 +30,219 @@ export class AdminService {
     @InjectRepository(CoinPurchase) private purchaseRepo: Repository<CoinPurchase>,
     @InjectRepository(Notification) private notifRepo: Repository<Notification>,
     @InjectRepository(EloHistory) private eloHistoryRepo: Repository<EloHistory>,
+    @InjectRepository(AppMeta) private appMetaRepo: Repository<AppMeta>,
     private gateway: AppGateway,
     private missionsService: MissionsService,
+    private discordService: DiscordService,
   ) {}
+
+  async onModuleInit() {
+    // Одноразовый глобальный сброс статистики и истории матчей (по запросу владельца)
+    try {
+      await this.runOneTimeGlobalReset();
+    } catch (e) {
+      console.error('[globalReset] failed:', e);
+    }
+    // Одноразовая отмена зависших активных матчей (по запросу владельца)
+    try {
+      await this.cancelActiveMatchesOnce();
+    } catch (e) {
+      console.error('[cancelActiveMatches] failed:', e);
+    }
+    // Разовая правка счёта матча #197 (победа N1ckz 13:12)
+    try {
+      await this.fixMatch197Once();
+    } catch (e) {
+      console.error('[fixMatch197] failed:', e);
+    }
+    // Разовый откат удвоенного ELO/коинов у матча #200
+    try {
+      await this.fixMatch200DoubleEloOnce();
+    } catch (e) {
+      console.error('[fixMatch200] failed:', e);
+    }
+    // Лечащий пересчёт агрегатов при старте
+    try {
+      await this.recalcAllStatTotals();
+    } catch (e) {
+      console.error('[recalcAllStatTotals] failed:', e);
+    }
+  }
+
+  /**
+   * Одноразово (защита флагом в app_meta) обнуляет статистику ВСЕХ игроков и
+   * удаляет всю историю матчей + динамику ELO. Кланы и монеты не трогаются.
+   */
+  private async runOneTimeGlobalReset(): Promise<void> {
+    const FLAG = 'global_reset_2026_06_14';
+    const done = await this.appMetaRepo.findOne({ where: { key: FLAG } });
+    if (done) return;
+
+    // 1. Обнуляем статистику и ELO у всех пользователей
+    await this.userRepo.createQueryBuilder().update(User).set({
+      elo: 1000,
+      matchesPlayed: 0, matchesWon: 0, matchesLost: 0,
+      killsTotal: 0, deathsTotal: 0, assistsTotal: 0,
+      ratingSum: 0, winStreak: 0, leaveCount: 0, cooldownUntil: null,
+    }).execute();
+
+    // 2. Удаляем историю матчей и динамику ELO (кланы не трогаем)
+    await this.matchRepo.query('DELETE FROM match_players');
+    await this.matchRepo.query('DELETE FROM matches');
+    await this.matchRepo.query('DELETE FROM elo_history');
+
+    await this.appMetaRepo.save(this.appMetaRepo.create({ key: FLAG, value: new Date().toISOString() }));
+    console.log('[globalReset] выполнен: статистика и история матчей обнулены для всех');
+  }
+
+  /** Разовая правка матча #197: засчитать победу N1ckz со счётом 13:12. */
+  private async fixMatch197Once(): Promise<void> {
+    const FLAG = 'fix_match_197';
+    const done = await this.appMetaRepo.findOne({ where: { key: FLAG } });
+    if (done) return;
+
+    const match = await this.matchRepo.findOne({ where: { id: 197 } });
+    if (match) {
+      // Находим, в какой команде капитан N1ckz
+      const caps = await this.userRepo.findBy({ id: In([match.captainAId, match.captainBId].filter(Boolean) as number[]) });
+      const n1ckz = caps.find((u) => (u.gameNickname || '').toLowerCase() === 'n1ckz');
+      const n1ckzIsA = n1ckz ? n1ckz.id === match.captainAId : true; // по умолчанию A
+      // Победившая команда (N1ckz) — 13, соперник — 12
+      match.scoreA = n1ckzIsA ? 13 : 12;
+      match.scoreB = n1ckzIsA ? 12 : 13;
+      match.winnerTeam = n1ckzIsA ? 'A' : 'B';
+      match.isDisputed = false;
+      match.status = MatchStatus.COMPLETED;
+      if (!match.endedAt) match.endedAt = new Date();
+      await this.matchRepo.save(match);
+      this.gateway.emitToMatch(197, 'match_updated', match);
+      console.log(`[fixMatch197] счёт исправлен: A=${match.scoreA} B=${match.scoreB} winner=${match.winnerTeam}`);
+    }
+    await this.appMetaRepo.save(this.appMetaRepo.create({ key: FLAG, value: new Date().toISOString() }));
+  }
+
+  /**
+   * Разовый откат лишнего (удвоенного) начисления ELO/коинов по матчу #200.
+   * Из-за старого resetKd (без отката) KD ввели дважды → ELO применилось 2 раза.
+   * Реверсим ОДНУ лишнюю порцию (player.eloChange / coinsEarned).
+   */
+  private async fixMatch200DoubleEloOnce(): Promise<void> {
+    const FLAG = 'fix_match_200_double_elo';
+    const done = await this.appMetaRepo.findOne({ where: { key: FLAG } });
+    if (done) return;
+
+    const match = await this.matchRepo.findOne({ where: { id: 200 } });
+    if (match && match.kdSubmitted) {
+      const allIds = [...new Set([...match.teamAIds, ...match.teamBIds])].filter(Boolean);
+      for (const uid of allIds) {
+        const player = await this.playerRepo.findOne({ where: { matchId: 200, userId: uid } });
+        const user = await this.userRepo.findOne({ where: { id: uid } });
+        if (!player || !user) continue;
+        user.elo = Math.max(100, user.elo - player.eloChange);     // убираем лишнюю порцию ELO
+        user.coins = Math.max(0, user.coins - player.coinsEarned); // и лишние коины
+        await this.userRepo.save(user);
+      }
+      console.log('[fixMatch200] удвоенное ELO/коины откатаны');
+    }
+    await this.appMetaRepo.save(this.appMetaRepo.create({ key: FLAG, value: new Date().toISOString() }));
+  }
+
+  /** Одноразово отменяет все активные (незавершённые) матчи и чистит их голосовые комнаты. */
+  private async cancelActiveMatchesOnce(): Promise<void> {
+    const FLAG = 'cancel_active_2026_06_14';
+    const done = await this.appMetaRepo.findOne({ where: { key: FLAG } });
+    if (done) return;
+
+    const active = await this.matchRepo.find({
+      where: [
+        { status: MatchStatus.READY_CHECK }, { status: MatchStatus.MAP_VETO },
+        { status: MatchStatus.IN_PROGRESS }, { status: MatchStatus.RESULT_PENDING },
+      ],
+    });
+    for (const m of active) {
+      m.status = MatchStatus.CANCELLED;
+      m.endedAt = new Date();
+      await this.matchRepo.save(m);
+      this.discordService.deleteMatchVoiceRooms(m.voiceChannelTId, m.voiceChannelCTId).catch(() => {});
+    }
+    await this.appMetaRepo.save(this.appMetaRepo.create({ key: FLAG, value: new Date().toISOString() }));
+    console.log(`[cancelActiveMatches] отменено активных матчей: ${active.length}`);
+  }
+
+  /**
+   * Источник правды — ЗАВЕРШЁННЫЕ матчи игрока (как в истории матчей).
+   * Пересчитывает matchesPlayed/Won/Lost и kills/deaths/assists/ratingSum
+   * строго по completed-матчам, дедуп легаси-дублей строк (по каждому полю
+   * берём значение с наибольшим модулем в рамках одного матча).
+   * Идемпотентно. ELO/coins НЕ трогаем.
+   */
+  private async recalcUserStatTotals(userId: number): Promise<void> {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) return;
+
+    const rows = await this.playerRepo.find({ where: { userId } });
+    const matchIds = [...new Set(rows.map((r) => r.matchId))];
+    const matches = matchIds.length
+      ? await this.matchRepo.findBy({ id: In(matchIds) })
+      : [];
+    const mMap = new Map<number, Match>();
+    for (const m of matches) {
+      // Клановые матчи и праки НЕ учитываются в личной статистике/ELO игрока
+      if (m.status === MatchStatus.COMPLETED && !m.isClanMatch && !m.league) mMap.set(m.id, m);
+    }
+
+    const byMatch = new Map<number, MatchPlayer[]>();
+    for (const r of rows) {
+      if (!mMap.has(r.matchId)) continue; // только завершённые матчи
+      const arr = byMatch.get(r.matchId) ?? [];
+      arr.push(r);
+      byMatch.set(r.matchId, arr);
+    }
+    const pick = (arr: MatchPlayer[], f: keyof MatchPlayer): number =>
+      arr.reduce((acc, r) => (Math.abs(Number(r[f] ?? 0)) > Math.abs(acc) ? Number(r[f] ?? 0) : acc), 0);
+
+    let kills = 0, deaths = 0, assists = 0, ratingSum = 0;
+    let played = 0, won = 0, lost = 0;
+    for (const [mid, arr] of byMatch) {
+      const m = mMap.get(mid)!;
+      played += 1;
+      kills += pick(arr, 'kills');
+      deaths += pick(arr, 'deaths');
+      assists += pick(arr, 'assists');
+      ratingSum += pick(arr, 'ratingMatch');
+      const isTeamA = m.teamAIds.includes(userId);
+      if (m.winnerTeam === 'draw') {
+        /* ничья — без W/L */
+      } else if ((isTeamA && m.winnerTeam === 'A') || (!isTeamA && m.winnerTeam === 'B')) {
+        won += 1;
+      } else if (m.winnerTeam === 'A' || m.winnerTeam === 'B') {
+        lost += 1;
+      }
+    }
+
+    user.killsTotal = kills;
+    user.deathsTotal = deaths;
+    user.assistsTotal = assists;
+    user.ratingSum = Math.round(ratingSum * 100) / 100;
+    user.matchesPlayed = played;
+    user.matchesWon = won;
+    user.matchesLost = lost;
+    await this.userRepo.save(user);
+  }
+
+  /** Пересчитать тоталы у всех игроков, у кого есть match_player строки. */
+  async recalcAllStatTotals(): Promise<number> {
+    const userIds: number[] = (
+      await this.playerRepo
+        .createQueryBuilder('mp')
+        .select('DISTINCT mp.user_id', 'uid')
+        .getRawMany()
+    ).map((r) => Number(r.uid));
+    for (const uid of userIds) {
+      await this.recalcUserStatTotals(uid);
+    }
+    return userIds.length;
+  }
 
   private async logElo(userId: number, eloBefore: number, eloAfter: number, reason: string) {
     const change = eloAfter - eloBefore;
@@ -164,8 +376,13 @@ export class AdminService {
     user.ratingSum     = 0;
     user.cooldownUntil = null;
     user.leaveCount    = 0;
+    // Полный сброс: ELO к стартовому, серия и динамика ELO обнуляются
+    user.elo           = 1000;
+    user.winStreak     = 0;
 
     await this.userRepo.save(user);
+    // Чистим историю ELO (график динамики)
+    await this.eloHistoryRepo.delete({ userId: id });
     return { ok: true };
   }
 
@@ -228,7 +445,15 @@ export class AdminService {
     }
 
     match.status = MatchStatus.CANCELLED;
-    return this.matchRepo.save(match);
+    await this.matchRepo.save(match);
+
+    // Удаляем голосовые комнаты матча
+    this.discordService.deleteMatchVoiceRooms(match.voiceChannelTId, match.voiceChannelCTId).catch(() => {});
+
+    // Матч теперь CANCELLED — пересчитываем агрегаты участников (он исключится)
+    const affected = [...new Set([...match.teamAIds, ...match.teamBIds])].filter(Boolean);
+    for (const uid of affected) await this.recalcUserStatTotals(uid);
+    return match;
   }
 
   private async reverseKdStats(match: Match): Promise<void> {
@@ -241,26 +466,10 @@ export class AdminService {
       const user = await this.userRepo.findOne({ where: { id: userId } });
       if (!user) continue;
 
-      const isTeamA = match.teamAIds.includes(userId);
-      const won     = (isTeamA && match.winnerTeam === 'A') || (!isTeamA && match.winnerTeam === 'B');
-      const isDraw  = match.winnerTeam === 'draw';
-
-      // Reverse per-match stat totals
-      user.killsTotal   = Math.max(0, user.killsTotal   - player.kills);
-      user.deathsTotal  = Math.max(0, user.deathsTotal  - player.deaths);
-      user.assistsTotal = Math.max(0, user.assistsTotal - player.assists);
-      user.ratingSum    = Math.max(0, Math.round((user.ratingSum - player.ratingMatch) * 100) / 100);
-
-      // Reverse match counters
-      user.matchesPlayed = Math.max(0, user.matchesPlayed - 1);
-      if (won)           user.matchesWon  = Math.max(0, user.matchesWon  - 1);
-      else if (!isDraw)  user.matchesLost = Math.max(0, user.matchesLost - 1);
-
-      // Reverse ELO, coins, XP
+      // Reverse ELO, coins (счётчики матчей/стата пересчитываются отдельно
+      // через recalcUserStatTotals после смены статуса матча на CANCELLED).
       user.elo    = Math.max(100, user.elo   - player.eloChange);
       user.coins  = Math.max(0,   user.coins - player.coinsEarned);
-      user.xp     = Math.max(0,   user.xp    - player.xpEarned);
-      user.level  = Math.floor(Math.sqrt(user.xp / 100)) + 1;
 
       await this.userRepo.save(user);
 
@@ -269,7 +478,7 @@ export class AdminService {
       player.kdMatch     = 0; player.kprMatch    = 0; player.aprMatch   = 0;
       player.srMatch     = 0; player.ratingMatch = 0;
       player.eloChange   = 0; player.eloAfter    = 0;
-      player.coinsEarned = 0; player.xpEarned    = 0;
+      player.coinsEarned = 0;
       await this.playerRepo.save(player);
     }
 
@@ -310,8 +519,33 @@ export class AdminService {
     match.status = MatchStatus.COMPLETED;
     match.endedAt = new Date();
 
-    // ELO / coins / XP / matchesPlayed are applied only after moderator submits KD
-    return this.matchRepo.save(match);
+    // Проставляем счёт, чтобы в истории не было 0:0.
+    // Берём счёт капитана выбранной командой-победителем; если его нет —
+    // используем любой заявленный счёт, согласованный с выбранным победителем.
+    if ((match.scoreA == null || match.scoreB == null || (match.scoreA === 0 && match.scoreB === 0)) && winner !== 'draw') {
+      const fromCapA = match.scoreAByCapA != null && match.scoreBByCapA != null ? { a: match.scoreAByCapA, b: match.scoreBByCapA } : null;
+      const fromCapB = match.scoreAByCapB != null && match.scoreBByCapB != null ? { a: match.scoreAByCapB, b: match.scoreBByCapB } : null;
+      const wantsAWin = winner === 'A';
+      const ok = (s: { a: number; b: number } | null) => s && (wantsAWin ? s.a > s.b : s.b > s.a);
+      const chosen = ok(wantsAWin ? fromCapA : fromCapB) ? (wantsAWin ? fromCapA : fromCapB)
+        : ok(fromCapA) ? fromCapA : ok(fromCapB) ? fromCapB : null;
+      if (chosen) { match.scoreA = chosen.a; match.scoreB = chosen.b; }
+    }
+    match.isDisputed = false;
+
+    // ELO / coins applied only after moderator submits KD
+    await this.matchRepo.save(match);
+
+    // Удаляем голосовые комнаты матча
+    this.discordService.deleteMatchVoiceRooms(match.voiceChannelTId, match.voiceChannelCTId).catch(() => {});
+
+    // Если K/D уже был внесён до подтверждения результата — матч теперь
+    // завершён, пересчитываем агрегаты участников.
+    if (match.kdSubmitted) {
+      const affected = [...new Set([...match.teamAIds, ...match.teamBIds])].filter(Boolean);
+      for (const uid of affected) await this.recalcUserStatTotals(uid);
+    }
+    return match;
   }
 
   // ── CONDR ELO System ──────────────────────────────────────────────────────
@@ -359,6 +593,39 @@ export class AdminService {
     }
   }
 
+  /**
+   * Процент модификатора по индивидуальному рейтингу за матч (всегда «в плюс» игроку).
+   * rating ≤ 1.00 → 0. rating > 1.00 → floor((rating − 1) · 50): 1.20→10, 1.40→20, 1.45→22.
+   */
+  private ratingModifierPct(rating: number): number {
+    if (!rating || rating <= 1.0) return 0;
+    return Math.max(0, Math.floor((rating - 1) * 50));
+  }
+
+  /** Коэффициент организованности команды = (размер наибольшего отряда − 1) · 5%. Без отряда — 0. */
+  private partyOrgCoef(match: Match, team: number[]): number {
+    let maxParty = 0;
+    for (const g of match.partyGroups ?? []) {
+      if (g.length >= 2 && g.every((id) => team.includes(id))) maxParty = Math.max(maxParty, g.length);
+    }
+    return maxParty >= 2 ? (maxParty - 1) * 5 : 0;
+  }
+
+  /**
+   * Знаковый вклад модификатора состава команд (компенсация преимущества отрядов).
+   * Разница коэффициентов: команда-андердог получает «+разница», организованная — «−разница».
+   * Равные коэффициенты → 0.
+   */
+  private partyModifierPct(match: Match, isTeamA: boolean): number {
+    const coefA = this.partyOrgCoef(match, match.teamAIds);
+    const coefB = this.partyOrgCoef(match, match.teamBIds);
+    const my = isTeamA ? coefA : coefB;
+    const opp = isTeamA ? coefB : coefA;
+    if (my === opp) return 0;
+    const diff = Math.abs(my - opp);
+    return my > opp ? -diff : diff;
+  }
+
   private async applyEloChanges(match: Match, winner: 'A' | 'B' | 'draw'): Promise<void> {
     const allIds = [...match.teamAIds, ...match.teamBIds];
     const users = await this.userRepo.findBy({ id: In(allIds) });
@@ -377,14 +644,24 @@ export class AdminService {
       const avgEloMyTeam = isTeamA ? avgEloA : avgEloB;
       const avgEloOpponent = isTeamA ? avgEloB : avgEloA;
 
-      const change = this.calcEloChange(won, draw, isCalibration, avgEloMyTeam, avgEloOpponent);
+      const baseChange = this.calcEloChange(won, draw, isCalibration, avgEloMyTeam, avgEloOpponent);
 
       const player = await this.playerRepo.findOne({
         where: { matchId: match.id, userId: user.id },
       });
 
+      // ── Модификаторы (суммируются, применяются после базового изменения) ──
+      // goodPct > 0 — выгоднее игроку (больше за победу / меньше за поражение).
+      //  1) личный рейтинг за матч — только вне калибровки;
+      //  2) состав команд (компенсация преимущества отрядов) — всегда.
+      const ratingPct = isCalibration ? 0 : this.ratingModifierPct(Number(player?.ratingMatch ?? 0));
+      const teamPct = this.partyModifierPct(match, isTeamA);
+      const goodPct = ratingPct + teamPct;
+      const change = draw
+        ? 0
+        : Math.floor(baseChange * (1 + (baseChange >= 0 ? goodPct : -goodPct) / 100));
+
       const coinsEarned = won ? 50 : draw ? 30 : 20;
-      const xpEarned = won ? 200 : draw ? 120 : 80;
 
       let newElo = user.elo + change;
       if (isCalibration) {
@@ -397,24 +674,21 @@ export class AdminService {
       const eloBefore = user.elo;
       user.elo = newElo;
       await this.logElo(user.id, eloBefore, newElo, isCalibration ? 'calibration' : 'match');
-      user.matchesPlayed += 1;
+      // matchesPlayed/Won/Lost больше НЕ инкрементируем здесь — они
+      // пересчитываются из завершённых матчей в recalcUserStatTotals (вызов
+      // ниже в submitKd). Тут поддерживаем только winStreak (это серия).
       if (won) {
-        user.matchesWon += 1;
         user.winStreak = (user.winStreak ?? 0) + 1;
       } else if (!draw) {
-        user.matchesLost += 1;
         user.winStreak = 0;
       }
       user.coins += coinsEarned;
-      user.xp += xpEarned;
-      user.level = Math.floor(Math.sqrt(user.xp / 100)) + 1;
       await this.userRepo.save(user);
 
       if (player) {
         player.eloAfter = user.elo;
         player.eloChange = change;
         player.coinsEarned = coinsEarned;
-        player.xpEarned = xpEarned;
         await this.playerRepo.save(player);
       }
 
@@ -743,6 +1017,35 @@ export class AdminService {
     return this.userRepo.save(user);
   }
 
+  async setVerified(id: number, value: boolean) {
+    const user = await this.userRepo.findOne({ where: { id } });
+    if (!user) throw new NotFoundException();
+    user.isVerified = value;
+    return this.userRepo.save(user);
+  }
+
+  async setDmHost(id: number, value: boolean) {
+    const user = await this.userRepo.findOne({ where: { id } });
+    if (!user) throw new NotFoundException();
+    user.isDmHost = value;
+    return this.userRepo.save(user);
+  }
+
+  async setCplAccess(id: number, value: boolean) {
+    const user = await this.userRepo.findOne({ where: { id } });
+    if (!user) throw new NotFoundException();
+    user.cplAccess = value;
+    return this.userRepo.save(user);
+  }
+
+  async setCplqAccess(id: number, value: boolean) {
+    const user = await this.userRepo.findOne({ where: { id } });
+    if (!user) throw new NotFoundException();
+    user.cplqAccess = value;
+    if (!value) user.cplqDanger = false;
+    return this.userRepo.save(user);
+  }
+
   // ── KD Confirmation ───────────────────────────────────────────────────────
 
   async getMatchesForKd(page = 1, limit = 20) {
@@ -831,25 +1134,22 @@ export class AdminService {
       player.srMatch    = srMatch;
       player.ratingMatch = ratingMatch;
       await this.playerRepo.save(player);
-
-      // ── Update user running totals ──────────────────────────────────────
-      const user = await this.userRepo.findOne({ where: { id: entry.userId } });
-      if (user) {
-        user.killsTotal   += k;
-        user.deathsTotal  += d;
-        user.assistsTotal += a;
-        user.ratingSum    = Math.round((user.ratingSum + ratingMatch) * 100) / 100;
-        await this.userRepo.save(user);
-      }
     }
 
     match.kdSubmitted = true;
     await this.matchRepo.save(match);
 
-    // Apply ELO / coins / XP / match record updates now that KD is confirmed
-    if (match.winnerTeam) {
+    // Apply ELO / coins / win-streak now that KD is confirmed.
+    // Лиговые матчи (CPL/CPL-Q) не трогают личный ELO/стату — они идут в CPR.
+    if (match.winnerTeam && !match.league) {
       await this.applyEloChanges(match, match.winnerTeam as 'A' | 'B' | 'draw');
     }
+
+    // Пересчитываем агрегаты (matchesPlayed/Won/Lost/kills/ratingSum) из
+    // источника правды — завершённых матчей. Идемпотентно: повторный ввод K/D
+    // больше не раздувает рейтинг.
+    const affected = [...new Set([...match.teamAIds, ...match.teamBIds])].filter(Boolean);
+    for (const uid of affected) await this.recalcUserStatTotals(uid);
 
     return match;
   }
@@ -858,8 +1158,18 @@ export class AdminService {
   async resetKd(matchId: number) {
     const match = await this.matchRepo.findOne({ where: { id: matchId } });
     if (!match) throw new NotFoundException('Match not found');
-    match.kdSubmitted = false;
-    return this.matchRepo.save(match);
+    // ВАЖНО: при сбросе откатываем уже начисленные ELO/коины, иначе повторный
+    // ввод KD начислит ELO второй раз (баг с удвоением ±MMR).
+    if (match.kdSubmitted) {
+      await this.reverseKdStats(match); // откат ELO/коинов + обнуление player-стату + kdSubmitted=false
+    } else {
+      match.kdSubmitted = false;
+    }
+    await this.matchRepo.save(match);
+    // Пересчитываем агрегаты участников из источника правды
+    const affected = [...new Set([...match.teamAIds, ...match.teamBIds])].filter(Boolean);
+    for (const uid of affected) await this.recalcUserStatTotals(uid);
+    return match;
   }
 
   // ── Content creation ──────────────────────────────────────────────────────

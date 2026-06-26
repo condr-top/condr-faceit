@@ -8,8 +8,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useUiStore } from '@/store/uiStore'
 
 const PAGES_WITH_NAV = [
-  '/dashboard', '/leaderboard', '/friends', '/shop', '/profile',
-  '/history', '/missions', '/support', '/tournaments',
+  '/dashboard', '/leaderboard', '/clans', '/shop', '/profile',
+  '/history', '/missions', '/support', '/tournaments', '/friends',
 ]
 
 const NO_PARTICLES = ['/auth']
@@ -18,13 +18,17 @@ export function SwipeNavProvider({ children }: { children: React.ReactNode }) {
   useSwipeNav()
   const pathname = usePathname()
   const { hideNav } = useUiStore()
-  const showNav = PAGES_WITH_NAV.some(p => pathname === p || pathname.startsWith(p + '/'))
-  const showParticles = !NO_PARTICLES.includes(pathname)
+  const isWeb = pathname === '/web' || pathname.startsWith('/web/')
+  const showNav = !isWeb && PAGES_WITH_NAV.some(p => pathname === p || pathname.startsWith(p + '/'))
+  // Сайт (/web) имеет собственную десктоп-оболочку — мобильный фон/навбар не нужны.
+  const showParticles = !isWeb && !NO_PARTICLES.includes(pathname)
 
   return (
     <>
       {showParticles && <ParticleBackground />}
-      <div style={{ position: 'relative', zIndex: 1 }}>
+      {/* Без собственного z-index: иначе контент образует stacking-контекст,
+          и нижние модалки (z:100) оказываются под навбаром (z:40). */}
+      <div style={{ position: 'relative' }}>
         {children}
       </div>
       <AnimatePresence>

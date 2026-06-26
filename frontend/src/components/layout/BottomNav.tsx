@@ -8,7 +8,7 @@ import NProgress from 'nprogress'
 export const tabs = [
   { href: '/dashboard',   label: 'Главная',  icon: HomeIcon,    color: '#E8092E' },
   { href: '/leaderboard', label: 'Рейтинг',  icon: TrophyIcon,  color: '#F59E0B' },
-  { href: '/friends',     label: 'Друзья',   icon: FriendsIcon, color: '#22C55E' },
+  { href: '/clans',       label: 'Кланы',    icon: ClanIcon,    color: '#22C55E' },
   { href: '/shop',        label: 'Магазин',  icon: ShopIcon,    color: '#A855F7' },
   { href: '/profile',     label: 'Профиль',  icon: ProfileIcon, color: '#60A5FA' },
 ]
@@ -45,24 +45,20 @@ function TrophyIcon({ active, color }: { active: boolean; color: string }) {
   )
 }
 
-function FriendsIcon({ active, color }: { active: boolean; color: string }) {
+function ClanIcon({ active, color }: { active: boolean; color: string }) {
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-      <circle cx="9" cy="7" r="4"
+      {/* Clan banner / pennant on a pole */}
+      <path d="M5 3V21"
         stroke={active ? color : 'rgba(255,255,255,0.35)'}
-        strokeWidth="1.7"
-        fill={active ? `${color}20` : 'none'}
+        strokeWidth="1.8" strokeLinecap="round"
+        style={{ transition: 'stroke 0.3s' }}
+      />
+      <path d="M5 4H17.5C18.3 4 18.7 5 18.1 5.6L16 8L18.1 10.4C18.7 11 18.3 12 17.5 12H5V4Z"
+        stroke={active ? color : 'rgba(255,255,255,0.35)'}
+        strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"
+        fill={active ? `${color}22` : 'none'}
         style={{ transition: 'all 0.3s' }}
-      />
-      <path d="M2 21C2 17.13 5.13 14 9 14C12.87 14 16 17.13 16 21"
-        stroke={active ? color : 'rgba(255,255,255,0.35)'}
-        strokeWidth="1.7" strokeLinecap="round"
-        style={{ transition: 'stroke 0.3s' }}
-      />
-      <path d="M16 3C17.66 3 19 4.34 19 6C19 7.66 17.66 9 16 9M18 14C20.21 14 22 15.79 22 18V21"
-        stroke={active ? color : 'rgba(255,255,255,0.2)'}
-        strokeWidth="1.7" strokeLinecap="round"
-        style={{ transition: 'stroke 0.3s' }}
       />
     </svg>
   )

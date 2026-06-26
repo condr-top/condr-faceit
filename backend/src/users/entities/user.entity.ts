@@ -34,12 +34,6 @@ export class User {
   @Column({ default: 0 })
   coins: number;
 
-  @Column({ default: 0 })
-  xp: number;
-
-  @Column({ default: 1 })
-  level: number;
-
   @Column({ name: 'matches_played', default: 0 })
   matchesPlayed: number;
 
@@ -67,6 +61,25 @@ export class User {
   @Column({ name: 'is_moderator', default: false })
   isModerator: boolean;
 
+  @Column({ name: 'is_verified', default: false })
+  isVerified: boolean;
+
+  /** Скрытая роль «DM Хост» — может публиковать свои PRO DM-лобби. Невидима для других. */
+  @Column({ name: 'is_dm_host', default: false })
+  isDmHost: boolean;
+
+  /** Доступ к лиге CPL (CONDR Pro League). Выдаётся вручную админом. */
+  @Column({ name: 'cpl_access', default: false })
+  cplAccess: boolean;
+
+  /** Доступ к лиге CPL-Q (квалификации). Выдаётся вручную админом. */
+  @Column({ name: 'cplq_access', default: false })
+  cplqAccess: boolean;
+
+  /** Игрок в Danger Zone CPL-Q (риск вылета) — обновляется еженедельным пересчётом. */
+  @Column({ name: 'cplq_danger', default: false })
+  cplqDanger: boolean;
+
   @Column({ name: 'is_banned', default: false })
   isBanned: boolean;
 
@@ -79,12 +92,6 @@ export class User {
   @Column({ name: 'premium_until', nullable: true, type: 'timestamp' })
   premiumUntil: Date;
 
-  @Column({ name: 'last_login_reward', nullable: true, type: 'timestamp' })
-  lastLoginReward: Date;
-
-  @Column({ name: 'login_streak', default: 0 })
-  loginStreak: number;
-
   @Column({ name: 'game_nickname', nullable: true })
   gameNickname: string;
 
@@ -96,6 +103,10 @@ export class User {
 
   @Column({ name: 'is_registered', default: false })
   isRegistered: boolean;
+
+  /** Прошёл ли пользователь гейт пригласительного кода (закрытый тест) */
+  @Column({ name: 'invite_redeemed', default: false })
+  inviteRedeemed: boolean;
 
   @Column({ name: 'nickname_changes_used', default: 0 })
   nicknameChangesUsed: number;

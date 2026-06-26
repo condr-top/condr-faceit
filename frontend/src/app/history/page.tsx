@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { useAuthStore } from '@/store/authStore'
 import { api } from '@/lib/api'
+import { Icon } from '@/components/ui/Icon'
+import { MatchCard } from '@/components/ui/MatchCard'
 
 interface MatchHistoryItem {
   matchId: number
@@ -65,8 +67,8 @@ function MatchIdRow({ matchId }: { matchId: number }) {
       }}
     >
       <span style={{ fontSize: 11, color: '#374151' }}>Матч #{matchId}</span>
-      <span style={{ fontSize: 10, color: copied ? '#22C55E' : '#374151', transition: 'color 0.2s' }}>
-        {copied ? '✓ Скопировано' : '⎘ Копировать ID'}
+      <span style={{ fontSize: 10, color: copied ? '#22C55E' : '#374151', transition: 'color 0.2s', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        {copied ? <><Icon name="check" size={11} />Скопировано</> : <><Icon name="copy" size={11} />Копировать ID</>}
       </span>
     </button>
   )
@@ -108,6 +110,8 @@ export default function HistoryPage() {
     try {
       const params = new URLSearchParams({ page: String(p), limit: String(limit) })
       if (targetUserId) params.set('userId', String(targetUserId))
+      const league = searchParams.get('league')
+      if (league === 'cpl' || league === 'cplq') params.set('league', league)
       const res = await api.get<HistoryResponse>(`/matches/history?${params}`)
       setItems(res.data.matches)
       setTotal(res.data.total)
@@ -140,13 +144,18 @@ export default function HistoryPage() {
     n > 0 ? '#22C55E' : n < 0 ? '#F87171' : '#9CA3AF'
 
   const statsSource = isOwnHistory ? user : targetProfile
-  const kd     = statsSource?.kdr ?? 0
-  const avg    = (statsSource as any)?.avgKills ?? 0
-  const rating = (statsSource as any)?.ratingOverall ?? 0
+  const kd     = Number(statsSource?.kdr ?? 0)
+  const avg    = Number((statsSource as any)?.avgKills ?? 0)
+  const rating = Number((statsSource as any)?.ratingOverall ?? 0)
   const played = statsSource?.matchesPlayed ?? 0
   const displayName = isOwnHistory
     ? (user?.gameNickname || user?.firstName || 'Вы')
     : (targetProfile?.gameNickname || targetProfile?.firstName || `Игрок #${targetUserId}`)
+  const GREEN = '#22C55E', YELLOW = '#EAB308', RED = '#EF4444', GREY = '#6B7280'
+  const ratingColor = rating > 1.1 ? GREEN : rating >= 0.9 ? YELLOW : RED
+  const kdColor = kd > 1.1 ? GREEN : kd >= 0.9 ? YELLOW : RED
+  const avgColor = avg > 16 ? GREEN : avg >= 11 ? YELLOW : RED
+  const fallbackElo = (statsSource as any)?.elo ?? 1000
 
   return (
     <div style={{ minHeight: '100vh', background: '#060608', paddingBottom: 88, color: '#fff' }}>
@@ -168,11 +177,11 @@ export default function HistoryPage() {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}
         >
-          ←
+          <Icon name="chevronLeft" size={18} />
         </button>
         <div>
-          <div style={{ fontSize: 16, fontWeight: 800, color: '#fff', lineHeight: 1.2 }}>
-            📊 История матчей
+          <div style={{ fontSize: 16, fontWeight: 800, color: '#fff', lineHeight: 1.2, display: 'flex', alignItems: 'center', gap: 7 }}>
+            <Icon name="barChart" size={16} />История матчей
           </div>
           {!isOwnHistory && (
             <div style={{ fontSize: 11, color: '#4B5563', marginTop: 1 }}>{displayName}</div>
@@ -181,38 +190,61 @@ export default function HistoryPage() {
       </div>
 
       <div style={{ padding: '16px 16px 0' }}>
-        {/* Overall stats card */}
+        {/* Overall stats — new standard */}
         {(isOwnHistory ? !!user : !!targetProfile) && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-            style={{
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.07)',
-              borderRadius: 14, padding: '14px', marginBottom: 16,
-            }}
-          >
+          <div style={{ marginBottom: 16 }}>
             {!isOwnHistory && (
-              <div style={{ fontSize: 12, color: '#4B5563', marginBottom: 4, fontWeight: 700 }}>{displayName}</div>
+              <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 8, fontWeight: 700 }}>{displayName}</div>
             )}
-            <div style={{ fontSize: 10, color: '#374151', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 10 }}>
-              Общая статистика
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, textAlign: 'center' }}>
-              {[
-                { label: 'Матчей', value: played, color: '#fff' },
-                { label: 'K/D', value: kd, color: '#EAB308' },
-                { label: 'AVG', value: avg, color: '#60A5FA' },
-                { label: 'Rating', value: rating, color: '#A855F7' },
-              ].map(s => (
-                <div key={s.label}>
-                  <div style={{ fontSize: 11, color: '#4B5563', marginBottom: 3 }}>{s.label}</div>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: s.color }}>{s.value}</div>
+            {/* Wide rating tile */}
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 24 }}
+              style={{
+                position: 'relative', overflow: 'hidden',
+                background: `linear-gradient(135deg, ${ratingColor}18, #0f0f15 60%)`,
+                border: `1px solid ${ratingColor}40`, borderRadius: 18,
+                padding: '16px 18px', marginBottom: 8,
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                boxShadow: `0 8px 30px ${ratingColor}14`,
+              }}
+            >
+              <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: ratingColor }} />
+              <div style={{ position: 'absolute', right: -30, top: -30, width: 130, height: 130, background: `radial-gradient(circle, ${ratingColor}22, transparent 70%)`, pointerEvents: 'none' }} />
+              <div>
+                <div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Icon name="star" size={13} color={ratingColor} />Рейтинг
                 </div>
+                <div style={{ fontSize: 38, fontWeight: 900, color: ratingColor, letterSpacing: '-1.5px', lineHeight: 1.05, marginTop: 4 }}>
+                  {rating.toFixed(2)}
+                </div>
+              </div>
+              <div style={{ fontSize: 11, color: '#6B7280', fontWeight: 700, textAlign: 'right' }}>
+                {played} <span style={{ display: 'block', fontSize: 9, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.08em' }}>матчей</span>
+              </div>
+            </motion.div>
+            {/* K/D + AVG colored tiles */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {[
+                { label: 'K/D', value: kd.toFixed(2), color: kdColor, icon: 'swords' as const },
+                { label: 'AVG', value: avg.toFixed(1), color: avgColor, icon: 'skull' as const },
+              ].map((s, i) => (
+                <motion.div
+                  key={s.label}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.06 + i * 0.04, type: 'spring', stiffness: 300, damping: 24 }}
+                  style={{ background: '#0f0f15', border: `1px solid ${s.color}26`, borderRadius: 14, padding: '12px 8px 10px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}
+                >
+                  <div style={{ position: 'absolute', top: 0, left: '18%', right: '18%', height: 1, background: `linear-gradient(90deg, transparent, ${s.color}aa, transparent)` }} />
+                  <div style={{ marginBottom: 5, display: 'flex', justifyContent: 'center' }}><Icon name={s.icon} size={15} color={s.color} /></div>
+                  <div style={{ fontSize: 17, fontWeight: 900, color: s.color, letterSpacing: '-0.5px', lineHeight: 1 }}>{s.value}</div>
+                  <div style={{ fontSize: 9, color: '#4B5563', fontWeight: 700, marginTop: 5, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{s.label}</div>
+                </motion.div>
               ))}
             </div>
-          </motion.div>
+          </div>
         )}
 
         {/* Match list */}
@@ -227,110 +259,13 @@ export default function HistoryPage() {
           </div>
         ) : items.length === 0 ? (
           <div style={{ textAlign: 'center', color: '#4B5563', padding: '60px 0' }}>
-            <div style={{ fontSize: 40, marginBottom: 10 }}>🎮</div>
+            <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'center' }}><Icon name="gamepad" size={40} strokeWidth={1.5} /></div>
             <p>Матчи пока не сыграны</p>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {items.map((item, i) => (
-              <motion.div
-                key={item.matchId}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.03, type: 'spring', stiffness: 300, damping: 24 }}
-                style={{
-                  borderRadius: 14,
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.07)',
-                  borderLeft: `3px solid ${resultBorderColor(item.result)}`,
-                  overflow: 'hidden',
-                }}
-              >
-                {/* Top row */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px 8px', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 13, fontWeight: 800, color: resultTextColor(item.result) }}>
-                      {resultLabel(item.result)}
-                    </span>
-                    {item.map && (
-                      <span style={{ fontSize: 11, color: '#4B5563', background: 'rgba(255,255,255,0.05)', padding: '2px 8px', borderRadius: 20 }}>
-                        {item.map}
-                      </span>
-                    )}
-                    {(item.totalRounds ?? 0) > 0 && (
-                      <span style={{ fontSize: 11, color: '#374151' }}>{item.totalRounds} раундов</span>
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {item.kdSubmitted && (item.eloChange ?? 0) !== 0 && (
-                      <span style={{ fontSize: 12, fontWeight: 700, color: eloColor(item.eloChange) }}>
-                        {(item.eloChange ?? 0) > 0 ? '+' : ''}{item.eloChange} ELO
-                      </span>
-                    )}
-                    <span style={{ fontSize: 11, color: '#374151' }}>
-                      {new Date(item.createdAt).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit' })}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Match ID row */}
-                <MatchIdRow matchId={item.matchId} />
-
-                {/* Stats row */}
-                {item.kdSubmitted ? (
-                  <>
-                    <div style={{ padding: '10px 14px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, textAlign: 'center' }}>
-                      <div>
-                        <div style={{ fontSize: 10, color: '#4B5563', marginBottom: 3 }}>K / A / D</div>
-                        <div style={{ fontSize: 12, fontWeight: 700 }}>
-                          <span style={{ color: '#22C55E' }}>{item.kills ?? 0}</span>
-                          <span style={{ color: '#374151' }}> / </span>
-                          <span style={{ color: '#A855F7' }}>{item.assists ?? 0}</span>
-                          <span style={{ color: '#374151' }}> / </span>
-                          <span style={{ color: '#F87171' }}>{item.deaths ?? 0}</span>
-                        </div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 10, color: '#4B5563', marginBottom: 3 }}>KD</div>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: '#EAB308' }}>{(item.kdMatch ?? 0).toFixed(2)}</div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 10, color: '#4B5563', marginBottom: 3 }}>KPR / APR</div>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: '#60A5FA' }}>
-                          {(item.kprMatch ?? 0).toFixed(2)} / {(item.aprMatch ?? 0).toFixed(2)}
-                        </div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 10, color: '#4B5563', marginBottom: 3 }}>Rating</div>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: '#A855F7' }}>{(item.ratingMatch ?? 0).toFixed(2)}</div>
-                      </div>
-                    </div>
-
-                    {/* SR bar */}
-                    <div style={{ padding: '0 14px 10px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontSize: 10, color: '#374151' }}>SR:</span>
-                        <div style={{ flex: 1, background: 'rgba(255,255,255,0.05)', borderRadius: 6, height: 5, overflow: 'hidden' }}>
-                          <div
-                            style={{
-                              height: '100%',
-                              background: 'linear-gradient(90deg, #6366f1, #A855F7)',
-                              borderRadius: 6,
-                              width: `${Math.max(0, Math.min(100, (item.srMatch ?? 0) * 100))}%`,
-                              transition: 'width 0.5s ease',
-                            }}
-                          />
-                        </div>
-                        <span style={{ fontSize: 10, color: '#9CA3AF' }}>{((item.srMatch ?? 0) * 100).toFixed(1)}%</span>
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <div style={{ padding: '12px 14px', textAlign: 'center', fontSize: 12, color: '#4B5563' }}>
-                    ⏳ Статистика ожидает подтверждения модератора
-                  </div>
-                )}
-              </motion.div>
+              <MatchCard key={item.matchId} m={item as any} fallbackElo={fallbackElo} delay={i * 0.03} />
             ))}
           </div>
         )}

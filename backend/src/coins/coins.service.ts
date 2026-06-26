@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, NotFoundException, Logger, OnApplicati
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import axios from 'axios';
+import { tgPost, tgGet } from '../common/telegram';
 import { CoinPurchase, PurchaseStatus } from './entities/coin-purchase.entity';
 import { User } from '../users/entities/user.entity';
 import { ReportsService } from '../reports/reports.service';
@@ -27,11 +28,11 @@ export class CoinsService implements OnApplicationBootstrap {
     const webhookUrl = `${publicUrl}/api/coins/webhook`;
     try {
       // Check current webhook
-      const info = await axios.get(`https://api.telegram.org/bot${botToken}/getWebhookInfo`);
+      const info = await tgGet('getWebhookInfo');
       const current = info.data?.result?.url || '';
 
       if (current !== webhookUrl) {
-        const res = await axios.post(`https://api.telegram.org/bot${botToken}/setWebhook`, { url: webhookUrl });
+        const res = await tgPost('setWebhook', { url: webhookUrl });
         if (res.data?.ok) {
           this.logger.log(`Webhook registered: ${webhookUrl}`);
         } else {
@@ -63,12 +64,16 @@ export class CoinsService implements OnApplicationBootstrap {
     });
     await this.purchaseRepo.save(purchase);
 
-    // Notify admin chat
-    const msgId = await this.sendAdminNotification(purchase, user);
-    if (msgId) {
-      purchase.telegramMessageId = msgId;
-      await this.purchaseRepo.save(purchase);
-    }
+    // Уведомление в админ-чат — В ФОНЕ, не блокируем ответ (иначе при недоступном
+    // Telegram запрос висит и на клиенте «вечная загрузка»).
+    this.sendAdminNotification(purchase, user)
+      .then(async (msgId) => {
+        if (msgId) {
+          purchase.telegramMessageId = msgId;
+          await this.purchaseRepo.save(purchase);
+        }
+      })
+      .catch((e) => this.logger.warn(`purchase notify failed: ${e?.message}`));
 
     return { purchaseId: purchase.id, coins, rubles };
   }
@@ -90,23 +95,21 @@ export class CoinsService implements OnApplicationBootstrap {
 
     try {
       const topicId = process.env.TOPIC_PURCHASES ? parseInt(process.env.TOPIC_PURCHASES) : undefined;
-      const res = await axios.post(
-        `https://api.telegram.org/bot${botToken}/sendMessage`,
-        {
-          chat_id: chatId,
-          text,
-          parse_mode: 'HTML',
-          ...(topicId ? { message_thread_id: topicId } : {}),
-          reply_markup: {
-            inline_keyboard: [[
-              { text: '✅ Подтвердить', callback_data: `confirm_coins_${purchase.id}` },
-              { text: '❌ Отклонить', callback_data: `reject_coins_${purchase.id}` },
-            ]],
-          },
+      const res = await tgPost('sendMessage', {
+        chat_id: chatId,
+        text,
+        parse_mode: 'HTML',
+        ...(topicId ? { message_thread_id: topicId } : {}),
+        reply_markup: {
+          inline_keyboard: [[
+            { text: '✅ Подтвердить', callback_data: `confirm_coins_${purchase.id}` },
+            { text: '❌ Отклонить', callback_data: `reject_coins_${purchase.id}` },
+          ]],
         },
-      );
+      });
       return res.data?.result?.message_id || null;
-    } catch {
+    } catch (e: any) {
+      this.logger.warn(`TG purchase sendMessage failed: ${e?.response?.data?.description || e?.message}`);
       return null;
     }
   }
@@ -144,12 +147,14 @@ export class CoinsService implements OnApplicationBootstrap {
     if (!botToken || !chatId || !purchase.telegramMessageId) return;
 
     try {
-      await axios.post(`https://api.telegram.org/bot${botToken}/editMessageReplyMarkup`, {
+      await tgPost('editMessageReplyMarkup', {
         chat_id: chatId,
         message_id: purchase.telegramMessageId,
         reply_markup: { inline_keyboard: [[{ text: note, callback_data: 'done' }]] },
       });
-    } catch {}
+    } catch (e: any) {
+      this.logger.warn(`TG editMessage failed: ${e?.response?.data?.description || e?.message}`);
+    }
   }
 
   async handleWebhook(body: any): Promise<void> {
@@ -177,10 +182,7 @@ export class CoinsService implements OnApplicationBootstrap {
 
     // Answer callback query
     try {
-      await axios.post(
-        `https://api.telegram.org/bot${process.env.BOT_TOKEN}/answerCallbackQuery`,
-        { callback_query_id: cb.id, text: 'Готово' },
-      );
+      await tgPost('answerCallbackQuery', { callback_query_id: cb.id, text: 'Готово' });
     } catch {}
   }
 
@@ -193,10 +195,7 @@ export class CoinsService implements OnApplicationBootstrap {
   }
 
   async setupWebhook(webhookUrl: string): Promise<any> {
-    const res = await axios.post(
-      `https://api.telegram.org/bot${process.env.BOT_TOKEN}/setWebhook`,
-      { url: `${webhookUrl}/api/coins/webhook` },
-    );
+    const res = await tgPost('setWebhook', { url: `${webhookUrl}/api/coins/webhook` });
     return res.data;
   }
 }

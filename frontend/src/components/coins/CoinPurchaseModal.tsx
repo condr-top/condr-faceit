@@ -2,9 +2,11 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence, useSpring, useMotionValue } from 'framer-motion'
+import { useSheetDrag } from '@/lib/useSheetDrag'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/store/authStore'
 import { useUiStore } from '@/store/uiStore'
+import { Icon } from '@/components/ui/Icon'
 
 type Step = 'amount' | 'payment' | 'pending' | 'confirmed' | 'rejected'
 
@@ -18,7 +20,7 @@ const PACKAGES = [
   { rubles: 50,   label: '500',    tag: null,       color: '#60A5FA', bg: 'rgba(96,165,250,0.07)'  },
   { rubles: 100,  label: '1 000',  tag: 'СТАРТ',    color: '#22C55E', bg: 'rgba(34,197,94,0.07)'   },
   { rubles: 300,  label: '3 000',  tag: 'ВЫГОДНО',  color: '#F59E0B', bg: 'rgba(245,158,11,0.07)'  },
-  { rubles: 500,  label: '5 000',  tag: '🔥 ХИТ',  color: '#E8092E', bg: 'rgba(232,9,46,0.09)'    },
+  { rubles: 500,  label: '5 000',  tag: 'ХИТ',     color: '#E8092E', bg: 'rgba(232,9,46,0.09)'    },
   { rubles: 1000, label: '10 000', tag: 'МАКС',     color: '#A855F7', bg: 'rgba(168,85,247,0.07)'  },
   { rubles: 2000, label: '20 000', tag: 'VIP',      color: '#EAB308', bg: 'rgba(234,179,8,0.07)'   },
 ]
@@ -64,8 +66,8 @@ function CoinBurst() {
                 y: Math.sin(angle) * dist,
               }}
               transition={{ duration: 0.85, delay: i * 0.045, ease: [0.2, 0.8, 0.4, 1] }}
-              style={{ fontSize: 20, lineHeight: 1 }}
-            >🪙</motion.div>
+              style={{ lineHeight: 1, color: '#EAB308' }}
+            ><Icon name="coins" size={20} /></motion.div>
           </div>
         )
       })}
@@ -74,6 +76,7 @@ function CoinBurst() {
 }
 
 export function CoinPurchaseModal({ onClose }: Props) {
+  const sheet = useSheetDrag(onClose)
   const { refreshUser } = useAuthStore()
   const { setHideNav } = useUiStore()
   const [step, setStep] = useState<Step>('amount')
@@ -158,6 +161,7 @@ export function CoinPurchaseModal({ onClose }: Props) {
         onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
       >
         <motion.div
+          {...sheet.panelProps}
           initial={{ y: '100%' }}
           animate={{ y: 0 }}
           exit={{ y: '100%' }}
@@ -183,7 +187,9 @@ export function CoinPurchaseModal({ onClose }: Props) {
 
           <div style={{ padding: '16px 20px 44px' }}>
             {/* Handle */}
-            <div style={{ width: 40, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.12)', margin: '0 auto 22px' }} />
+            <div {...sheet.handleProps} style={{ ...sheet.handleProps.style, padding: '2px 0 20px' }}>
+              <div style={{ width: 40, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.12)' }} />
+            </div>
 
             {/* Step progress (only on amount + payment) */}
             {(step === 'amount' || step === 'payment') && (
@@ -237,8 +243,8 @@ export function CoinPurchaseModal({ onClose }: Props) {
                         scale: [1, 1.06, 1],
                       }}
                       transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
-                      style={{ fontSize: 54, display: 'inline-block', marginBottom: 10 }}
-                    >🪙</motion.div>
+                      style={{ display: 'inline-flex', marginBottom: 10, color: '#EAB308' }}
+                    ><Icon name="coins" size={52} strokeWidth={1.6} /></motion.div>
                     <div style={{ fontSize: 22, fontWeight: 900, color: '#fff', letterSpacing: '-0.5px', marginBottom: 6 }}>CONDR Coins</div>
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.22)', borderRadius: 20, padding: '5px 16px' }}>
                       <span style={{ fontSize: 11, fontWeight: 800, color: '#EAB308', letterSpacing: '0.03em' }}>1 ₽ = 10 монет</span>
@@ -278,7 +284,7 @@ export function CoinPurchaseModal({ onClose }: Props) {
                               whiteSpace: 'nowrap',
                             }}>{pkg.tag}</div>
                           )}
-                          <div style={{ fontSize: 22, marginBottom: 4 }}>🪙</div>
+                          <div style={{ marginBottom: 4, color: '#EAB308', display: 'flex', justifyContent: 'center' }}><Icon name="coins" size={22} /></div>
                           <div style={{ fontSize: 15, fontWeight: 900, color: sel ? pkg.color : '#fff', letterSpacing: '-0.3px', lineHeight: 1 }}>{pkg.label}</div>
                           <div style={{ fontSize: 10, color: sel ? `${pkg.color}99` : 'rgba(255,255,255,0.28)', fontWeight: 600, marginTop: 3 }}>{pkg.rubles} ₽</div>
                         </motion.button>
@@ -323,8 +329,8 @@ export function CoinPurchaseModal({ onClose }: Props) {
                       >
                         <span style={{ fontSize: 12, color: '#6B7280', fontWeight: 600 }}>Получите</span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontSize: 20, fontWeight: 900, color: '#EAB308' }}>
-                            🪙 <AnimNum value={coins} />
+                          <span style={{ fontSize: 20, fontWeight: 900, color: '#EAB308', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            <Icon name="coins" size={19} /> <AnimNum value={coins} />
                           </span>
                           <span style={{ fontSize: 10, color: 'rgba(234,179,8,0.5)', fontWeight: 700 }}>монет</span>
                         </div>
@@ -433,9 +439,9 @@ export function CoinPurchaseModal({ onClose }: Props) {
                       >
                         <AnimatePresence mode="wait">
                           {copied ? (
-                            <motion.span key="ok" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>✓ Скопировано</motion.span>
+                            <motion.span key="ok" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Icon name="check" size={13} />Скопировано</motion.span>
                           ) : (
-                            <motion.span key="cp" initial={{ scale: 0.8 }} animate={{ scale: 1 }}>📋 Копировать</motion.span>
+                            <motion.span key="cp" initial={{ scale: 0.8 }} animate={{ scale: 1 }} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Icon name="clipboard" size={13} />Копировать</motion.span>
                           )}
                         </AnimatePresence>
                       </motion.button>
@@ -444,13 +450,13 @@ export function CoinPurchaseModal({ onClose }: Props) {
 
                   {/* Coins preview row */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', background: 'rgba(234,179,8,0.05)', border: '1px solid rgba(234,179,8,0.14)', borderRadius: 14, marginBottom: 18 }}>
-                    <span style={{ fontSize: 22 }}>🪙</span>
+                    <Icon name="coins" size={22} color="#EAB308" />
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 9, color: '#4B5563', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 1 }}>Зачислим после проверки</div>
                       <div style={{ fontSize: 19, fontWeight: 900, color: '#EAB308', letterSpacing: '-0.3px' }}>{coins.toLocaleString()} монет</div>
                     </div>
-                    <div style={{ fontSize: 9, fontWeight: 800, color: '#22C55E', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.22)', borderRadius: 8, padding: '4px 9px', letterSpacing: '0.04em' }}>
-                      ПОСЛЕ ✓
+                    <div style={{ fontSize: 9, fontWeight: 800, color: '#22C55E', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.22)', borderRadius: 8, padding: '4px 9px', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 3 }}>
+                      ПОСЛЕ <Icon name="check" size={10} />
                     </div>
                   </div>
 
@@ -537,7 +543,7 @@ export function CoinPurchaseModal({ onClose }: Props) {
                         style={{ position: 'absolute', top: 0, bottom: 0, width: '30%', background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent)', pointerEvents: 'none' }}
                       />
                     )}
-                    <span style={{ position: 'relative' }}>{loading ? 'Создаём заявку...' : '✓ Я перевёл деньги'}</span>
+                    <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 7 }}>{loading ? 'Создаём заявку...' : <><Icon name="check" size={16} />Я перевёл деньги</>}</span>
                   </motion.button>
                   <div style={{ fontSize: 11, color: '#2D2D36', textAlign: 'center', marginTop: 10 }}>
                     Администратор проверит перевод в течение 3 минут
@@ -560,8 +566,8 @@ export function CoinPurchaseModal({ onClose }: Props) {
                       />
                     ))}
                     <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'rgba(232,9,46,0.08)', border: '1px solid rgba(232,9,46,0.28)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <motion.div animate={{ rotate: 360 }} transition={{ duration: 3.5, repeat: Infinity, ease: 'linear' }} style={{ fontSize: 40 }}>
-                        🪙
+                      <motion.div animate={{ rotate: 360 }} transition={{ duration: 3.5, repeat: Infinity, ease: 'linear' }} style={{ color: '#EAB308', display: 'flex' }}>
+                        <Icon name="coins" size={40} strokeWidth={1.6} />
                       </motion.div>
                     </div>
                   </div>
@@ -577,7 +583,7 @@ export function CoinPurchaseModal({ onClose }: Props) {
                     {[
                       { label: 'Заявка', value: `#${purchaseId}`, mono: true, color: '#6B7280' },
                       { label: 'Сумма', value: `${rubles.toLocaleString()} ₽`, color: '#fff' },
-                      { label: 'Монеты', value: `🪙 ${coins.toLocaleString()}`, color: '#EAB308' },
+                      { label: 'Монеты', value: `${coins.toLocaleString()}`, color: '#EAB308' },
                       { label: 'Банк', value: effectiveBank, color: '#6B7280' },
                     ].map(({ label, value, mono, color }, idx) => (
                       <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: idx < 3 ? 9 : 0, fontSize: 13 }}>
@@ -615,13 +621,13 @@ export function CoinPurchaseModal({ onClose }: Props) {
                       initial={{ scale: 0, rotate: -25 }}
                       animate={{ scale: 1, rotate: 0 }}
                       transition={{ type: 'spring', stiffness: 260, damping: 17, delay: 0.08 }}
-                      style={{ fontSize: 76, filter: 'drop-shadow(0 0 36px rgba(234,179,8,0.75))', zIndex: 1, position: 'relative' }}
-                    >🪙</motion.div>
+                      style={{ filter: 'drop-shadow(0 0 36px rgba(234,179,8,0.75))', zIndex: 1, position: 'relative', color: '#EAB308', display: 'flex' }}
+                    ><Icon name="coins" size={72} strokeWidth={1.6} /></motion.div>
                   </div>
 
                   <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-                    <div style={{ fontSize: 10, fontWeight: 900, color: '#22C55E', textTransform: 'uppercase', letterSpacing: '0.16em', marginBottom: 8 }}>
-                      ✓ ОПЛАТА ПОДТВЕРЖДЕНА
+                    <div style={{ fontSize: 10, fontWeight: 900, color: '#22C55E', textTransform: 'uppercase', letterSpacing: '0.16em', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                      <Icon name="check" size={11} />ОПЛАТА ПОДТВЕРЖДЕНА
                     </div>
                     <div style={{ fontSize: 26, fontWeight: 900, color: '#fff', letterSpacing: '-0.5px', marginBottom: 22 }}>
                       Монеты зачислены!
@@ -643,7 +649,7 @@ export function CoinPurchaseModal({ onClose }: Props) {
                     <span style={{ fontSize: 38, fontWeight: 900, color: '#EAB308', letterSpacing: '-1px' }}>
                       <AnimNum value={coins} delay={0.4} />
                     </span>
-                    <span style={{ fontSize: 24 }}>🪙</span>
+                    <Icon name="coins" size={24} color="#EAB308" />
                   </motion.div>
 
                   <motion.button
@@ -665,7 +671,7 @@ export function CoinPurchaseModal({ onClose }: Props) {
                       transition={{ duration: 1.8, repeat: Infinity, repeatDelay: 2.5 }}
                       style={{ position: 'absolute', top: 0, bottom: 0, width: '30%', background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.22), transparent)', pointerEvents: 'none' }}
                     />
-                    <span style={{ position: 'relative' }}>Отлично! 🎉</span>
+                    <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 7 }}>Отлично!<Icon name="sparkles" size={16} /></span>
                   </motion.button>
                 </motion.div>
               )}
@@ -677,8 +683,8 @@ export function CoinPurchaseModal({ onClose }: Props) {
                     initial={{ scale: 0.5 }}
                     animate={{ scale: 1, rotate: [-10, 10, -8, 8, 0] }}
                     transition={{ type: 'spring', stiffness: 300, damping: 12, delay: 0.1 }}
-                    style={{ fontSize: 68, marginBottom: 18, display: 'inline-block' }}
-                  >❌</motion.div>
+                    style={{ marginBottom: 18, display: 'inline-flex', color: '#F87171' }}
+                  ><Icon name="x" size={64} strokeWidth={2.2} /></motion.div>
                   <div style={{ fontSize: 22, fontWeight: 900, color: '#F87171', marginBottom: 8, letterSpacing: '-0.3px' }}>Платёж отклонён</div>
                   <div style={{ fontSize: 13, color: '#374151', marginBottom: 28, lineHeight: 1.65 }}>
                     Администратор не смог подтвердить перевод.<br />Проверьте правильность суммы и попробуйте снова.

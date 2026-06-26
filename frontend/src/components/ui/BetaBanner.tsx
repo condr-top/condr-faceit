@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { Icon } from '@/components/ui/Icon'
 
 const ACCENT = '#E8092E'
 
@@ -101,9 +102,9 @@ export function BetaBanner() {
                     position: 'absolute', inset: 4, borderRadius: '50%',
                     background: 'linear-gradient(160deg, #1a1620, #0e0c12)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 38, boxShadow: 'inset 0 1px 8px rgba(255,255,255,0.06)',
+                    color: ACCENT, boxShadow: 'inset 0 1px 8px rgba(255,255,255,0.06)',
                   }}>
-                    🧪
+                    <Icon name="flask" size={36} strokeWidth={1.6} />
                   </div>
                 </div>
               </motion.div>
@@ -139,7 +140,7 @@ export function BetaBanner() {
                 textAlign: 'center', fontSize: 14, color: 'rgba(255,255,255,0.52)',
                 lineHeight: 1.65, marginBottom: 22, padding: '0 6px',
               }}>
-                Приложение в активной разработке. Могут встречаться баги и недоработки — спасибо, что тестируешь с нами 🤝
+                Приложение в активной разработке. Могут встречаться баги и недоработки — спасибо, что тестируешь с нами <Icon name="handshake" size={15} style={{ verticalAlign: 'text-bottom' }} />
               </motion.div>
 
               {/* Contact card */}

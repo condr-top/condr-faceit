@@ -2,15 +2,18 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useSheetDrag } from '@/lib/useSheetDrag'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/store/authStore'
 import { useUiStore } from '@/store/uiStore'
 import { REGIONS } from '@/lib/regions'
 import { Flag } from '@/components/ui/Flag'
+import { Icon } from '@/components/ui/Icon'
 
 interface Props { onClose: () => void }
 
 export function RegionPicker({ onClose }: Props) {
+  const sheet = useSheetDrag(onClose)
   const { user, refreshUser } = useAuthStore()
   const { setHideNav } = useUiStore()
   const [saving, setSaving] = useState(false)
@@ -52,7 +55,7 @@ export function RegionPicker({ onClose }: Props) {
     // Full-screen backdrop — plain div, not motion
     <div
       style={{
-        position: 'fixed', inset: 0, zIndex: 60,
+        position: 'fixed', inset: 0, zIndex: 260,
         background: 'rgba(0,0,0,0.85)',
         display: 'flex', alignItems: 'flex-end',
         overflowX: 'hidden', overflowY: 'hidden',
@@ -61,6 +64,7 @@ export function RegionPicker({ onClose }: Props) {
     >
       {/* Sheet — slides up */}
       <motion.div
+        {...sheet.panelProps}
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
@@ -80,11 +84,9 @@ export function RegionPicker({ onClose }: Props) {
         }}
       >
         {/* Handle */}
-        <div style={{
-          width: 36, height: 4, borderRadius: 2,
-          background: 'rgba(255,255,255,0.15)',
-          margin: '14px auto 0', flexShrink: 0,
-        }} />
+        <div {...sheet.handleProps} style={{ ...sheet.handleProps.style, padding: '14px 0 6px' }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.15)' }} />
+        </div>
 
         {/* Header */}
         <div style={{
@@ -157,7 +159,7 @@ export function RegionPicker({ onClose }: Props) {
                     {r.name}
                   </span>
                   {isActive && (
-                    <span style={{ marginLeft: 'auto', fontSize: 14, color: '#E8092E', flexShrink: 0 }}>✓</span>
+                    <Icon name="check" size={15} color="#E8092E" style={{ marginLeft: 'auto', flexShrink: 0 }} />
                   )}
                 </button>
               )

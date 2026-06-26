@@ -6,13 +6,16 @@ import { Match } from './entities/match.entity';
 import { MatchPlayer } from './entities/match-player.entity';
 import { User } from '../users/entities/user.entity';
 import { Notification } from '../notifications/entities/notification.entity';
+import { ClanMatch } from '../clans/entities/clan-match.entity';
 import { GatewayModule } from '../gateway/gateway.module';
 import { DiscordModule } from '../discord/discord.module';
+import { ClansModule } from '../clans/clans.module';
+import { ClanQueueService } from './clan-queue.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Match, MatchPlayer, User, Notification]), GatewayModule, DiscordModule],
+  imports: [TypeOrmModule.forFeature([Match, MatchPlayer, User, Notification, ClanMatch]), GatewayModule, DiscordModule, ClansModule],
   controllers: [MatchesController],
-  providers: [MatchesService],
-  exports: [MatchesService],
+  providers: [MatchesService, ClanQueueService],
+  exports: [MatchesService, ClanQueueService],
 })
 export class MatchesModule {}

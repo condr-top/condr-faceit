@@ -17,6 +17,16 @@ export class ShopController {
     return this.shopService.getUserInventory(req.user.id);
   }
 
+  @Post('premium')
+  buyPremium(@Request() req: any) {
+    return this.shopService.buyPremium(req.user.id);
+  }
+
+  @Post('cplq')
+  buyCplq(@Request() req: any) {
+    return this.shopService.buyCplq(req.user.id);
+  }
+
   @Post(':id/buy')
   buy(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
     return this.shopService.buyWithCoins(req.user.id, id);

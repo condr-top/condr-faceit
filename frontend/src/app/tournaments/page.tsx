@@ -5,6 +5,7 @@ import { motion } from 'framer-motion'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/store/authStore'
 import { RequireRegistration } from '@/components/providers/RequireRegistration'
+import { Icon } from '@/components/ui/Icon'
 
 interface Tournament {
   id: number
@@ -65,7 +66,7 @@ export default function TournamentsPage() {
           style={{ paddingTop: 20, paddingBottom: 16 }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 22 }}>⚡</span>
+            <Icon name="bolt" size={22} color="#EAB308" />
             <h1 style={{ fontSize: 20, fontWeight: 900, color: '#fff', margin: 0, letterSpacing: '-0.3px' }}>Турниры</h1>
           </div>
         </motion.div>
@@ -136,8 +137,8 @@ export default function TournamentsPage() {
                       background: 'rgba(234,179,8,0.06)', borderRadius: 10, padding: '8px 4px',
                       border: '1px solid rgba(234,179,8,0.15)',
                     }}>
-                      <div style={{ fontSize: 14, fontWeight: 800, color: '#EAB308' }}>
-                        {t.entryFee > 0 ? `🪙${t.entryFee}` : 'FREE'}
+                      <div style={{ fontSize: 14, fontWeight: 800, color: '#EAB308', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
+                        {t.entryFee > 0 ? <><Icon name="coins" size={13} />{t.entryFee}</> : 'FREE'}
                       </div>
                       <div style={{ fontSize: 10, color: '#4B5563', marginTop: 2 }}>Взнос</div>
                     </div>
@@ -145,14 +146,14 @@ export default function TournamentsPage() {
                       background: 'rgba(34,197,94,0.06)', borderRadius: 10, padding: '8px 4px',
                       border: '1px solid rgba(34,197,94,0.15)',
                     }}>
-                      <div style={{ fontSize: 14, fontWeight: 800, color: '#22C55E' }}>🪙{t.prizePool}</div>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: '#22C55E', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}><Icon name="coins" size={13} />{t.prizePool}</div>
                       <div style={{ fontSize: 10, color: '#4B5563', marginTop: 2 }}>Призовой</div>
                     </div>
                   </div>
 
                   {t.startsAt && (
-                    <p style={{ fontSize: 11, color: '#4B5563', marginBottom: 10, marginTop: 0 }}>
-                      🕐 Начало: {new Date(t.startsAt).toLocaleString('ru-RU')}
+                    <p style={{ fontSize: 11, color: '#4B5563', marginBottom: 10, marginTop: 0, display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <Icon name="timer" size={12} />Начало: {new Date(t.startsAt).toLocaleString('ru-RU')}
                     </p>
                   )}
 
@@ -184,7 +185,7 @@ export default function TournamentsPage() {
 
         {!tournaments.length && (
           <div style={{ textAlign: 'center', color: '#4B5563', padding: '60px 0' }}>
-            <div style={{ fontSize: 40, marginBottom: 10 }}>⚡</div>
+            <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'center' }}><Icon name="bolt" size={40} /></div>
             <p>Нет активных турниров</p>
           </div>
         )}

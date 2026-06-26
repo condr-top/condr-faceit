@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Body, Param, ParseIntPipe, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, ParseIntPipe, UseGuards, Request } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminGuard } from '../auth/admin.guard';
 import { SupportService } from './support.service';
@@ -8,54 +8,55 @@ import { SupportService } from './support.service';
 export class SupportController {
   constructor(private supportService: SupportService) {}
 
-  /** User: send message to support */
-  @Post('message')
-  sendMessage(@Request() req: any, @Body('text') text: string) {
-    return this.supportService.sendMessage(req.user.id, text);
+  // ── USER: tickets ──────────────────────────────────────────────────────────
+  @Post('tickets')
+  createTicket(@Request() req: any, @Body('category') category: string, @Body('subject') subject: string, @Body('text') text: string) {
+    return this.supportService.createTicket(req.user.id, category, subject, text);
   }
 
-  /** User: get own chat history */
-  @Get('messages')
-  getMyChat(@Request() req: any) {
-    return this.supportService.getMyChat(req.user.id);
+  @Get('tickets')
+  myTickets(@Request() req: any) {
+    return this.supportService.listMyTickets(req.user.id);
   }
 
-  /** Admin: get all chats list */
-  @Get('admin/chats')
+  @Get('tickets/:id')
+  myTicket(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
+    return this.supportService.getMyTicket(req.user.id, id);
+  }
+
+  @Post('tickets/:id/message')
+  sendMessage(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Body('text') text: string) {
+    return this.supportService.userSendMessage(req.user.id, id, text);
+  }
+
+  // ── ADMIN: tickets ─────────────────────────────────────────────────────────
+  @Get('admin/tickets')
   @UseGuards(AdminGuard)
-  getAllChats() {
-    return this.supportService.getAllChats();
+  adminTickets(@Query('status') status?: string) {
+    return this.supportService.adminListTickets(status);
   }
 
-  /** Admin: unread count */
   @Get('admin/unread')
   @UseGuards(AdminGuard)
-  getUnread() {
-    return this.supportService.getUnreadCount();
+  adminUnread() {
+    return this.supportService.adminUnreadCount();
   }
 
-  /** Admin: get chat with specific user */
-  @Get('admin/chats/:userId')
+  @Get('admin/tickets/:id')
   @UseGuards(AdminGuard)
-  getChat(@Param('userId', ParseIntPipe) userId: number) {
-    return this.supportService.getChat(userId);
+  adminTicket(@Param('id', ParseIntPipe) id: number) {
+    return this.supportService.adminGetTicket(id);
   }
 
-  /** Admin: close/clear chat */
-  @Delete('admin/chats/:userId')
+  @Post('admin/tickets/:id/reply')
   @UseGuards(AdminGuard)
-  closeChat(@Param('userId', ParseIntPipe) userId: number) {
-    return this.supportService.closeChat(userId);
+  adminReply(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Body('text') text: string) {
+    return this.supportService.adminReply(req.user.id, id, text);
   }
 
-  /** Admin: reply to user */
-  @Post('admin/reply')
+  @Post('admin/tickets/:id/close')
   @UseGuards(AdminGuard)
-  adminReply(
-    @Request() req: any,
-    @Body('userId') userId: number,
-    @Body('text') text: string,
-  ) {
-    return this.supportService.adminReply(req.user.id, userId, text);
+  adminClose(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
+    return this.supportService.adminCloseTicket(req.user.id, id);
   }
 }

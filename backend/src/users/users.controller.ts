@@ -16,11 +16,6 @@ export class UsersController {
     return this.usersService.getProfile(req.user.id);
   }
 
-  @Post('daily-reward')
-  claimDaily(@Request() req: any) {
-    return this.usersService.claimDailyReward(req.user.id);
-  }
-
   @Post('mini-game/claim')
   claimMiniGame(@Request() req: any) {
     return this.usersService.claimMiniGameReward(req.user.id);
@@ -44,6 +39,11 @@ export class UsersController {
       const { BadRequestException } = await import('@nestjs/common');
       throw new BadRequestException(e.message);
     }
+  }
+
+  @Post('invite/redeem')
+  redeemInvite(@Request() req: any, @Body('code') code: string) {
+    return this.usersService.redeemInvite(req.user.id, code);
   }
 
   @Post('register')

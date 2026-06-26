@@ -59,8 +59,36 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
     client.leave(`match:${matchId}`);
   }
 
+  @SubscribeMessage('join_clan')
+  handleJoinClan(@ConnectedSocket() client: Socket, @MessageBody() clanId: number) {
+    client.join(`clan:${clanId}`);
+  }
+
+  @SubscribeMessage('leave_clan')
+  handleLeaveClan(@ConnectedSocket() client: Socket, @MessageBody() clanId: number) {
+    client.leave(`clan:${clanId}`);
+  }
+
+  @SubscribeMessage('join_exchange')
+  handleJoinExchange(@ConnectedSocket() client: Socket) {
+    client.join('scrim_exchange');
+  }
+
+  @SubscribeMessage('leave_exchange')
+  handleLeaveExchange(@ConnectedSocket() client: Socket) {
+    client.leave('scrim_exchange');
+  }
+
   emitToMatch(matchId: number, event: string, data: any) {
     this.server.to(`match:${matchId}`).emit(event, data);
+  }
+
+  emitToClan(clanId: number, event: string, data: any) {
+    this.server.to(`clan:${clanId}`).emit(event, data);
+  }
+
+  emitToExchange(event: string, data: any) {
+    this.server.to('scrim_exchange').emit(event, data);
   }
 
   emitToUser(userId: number, event: string, data: any) {
@@ -68,6 +96,16 @@ export class AppGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (socketId) {
       this.server.to(socketId).emit(event, data);
     }
+  }
+
+  /** Онлайн ли пользователь (есть активный сокет). */
+  isUserOnline(userId: number): boolean {
+    return this.userSockets.has(userId);
+  }
+
+  /** Broadcast всем подключённым клиентам. */
+  emitToAll(event: string, data: any) {
+    this.server.emit(event, data);
   }
 
   emitQueueUpdate(queueSize: number) {

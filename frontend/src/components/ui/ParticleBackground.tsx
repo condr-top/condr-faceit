@@ -27,11 +27,11 @@ const VARIANTS: Record<Variant, {
   speed: number
 }> = {
   dashboard: {
-    colors: ['#E8092E', '#ff2d55', '#A855F7', '#6366f1'],
-    glowTop: 'rgba(232,9,46,0.12)',
-    glowBottom: 'rgba(168,85,247,0.06)',
+    colors: ['#E8092E', '#ff2d55', '#b4001e', '#ff6b81'],
+    glowTop: 'rgba(232,9,46,0.13)',
+    glowBottom: 'rgba(232,9,46,0.05)',
     lineColor: '232,9,46',
-    count: 55, speed: 0.4,
+    count: 50, speed: 0.35,
   },
   profile: {
     colors: ['#A855F7', '#8B5CF6', '#6366f1', '#ec4899'],
@@ -114,8 +114,10 @@ export function ParticleBackground() {
     resize()
     window.addEventListener('resize', resize)
 
+    const count = cfg.count
+
     type P = { x: number; y: number; vx: number; vy: number; size: number; alpha: number; color: string }
-    const particles: P[] = Array.from({ length: cfg.count }, () => ({
+    const particles: P[] = Array.from({ length: count }, () => ({
       x: Math.random() * window.innerWidth,
       y: Math.random() * window.innerHeight,
       vx: (Math.random() - 0.5) * cfg.speed,
@@ -125,25 +127,26 @@ export function ParticleBackground() {
       color: cfg.colors[Math.floor(Math.random() * cfg.colors.length)],
     }))
 
-    let raf: number
+    let raf = 0
     const draw = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       for (let i = 0; i < particles.length; i++) {
+        const pi = particles[i]
         for (let j = i + 1; j < particles.length; j++) {
-          const dx = particles[i].x - particles[j].x
-          const dy = particles[i].y - particles[j].y
-          const d = Math.sqrt(dx * dx + dy * dy)
-          if (d < 130) {
+          const pj = particles[j]
+          const dx = pi.x - pj.x, dy = pi.y - pj.y
+          const dist = Math.sqrt(dx * dx + dy * dy)
+          if (dist < 120) {
             ctx.beginPath()
-            ctx.moveTo(particles[i].x, particles[i].y)
-            ctx.lineTo(particles[j].x, particles[j].y)
-            ctx.strokeStyle = `rgba(${cfg.lineColor},${0.07 * (1 - d / 130)})`
+            ctx.moveTo(pi.x, pi.y)
+            ctx.lineTo(pj.x, pj.y)
+            ctx.strokeStyle = `rgba(${cfg.lineColor},${(0.07 * (1 - dist / 120)).toFixed(3)})`
             ctx.lineWidth = 0.5
             ctx.stroke()
           }
         }
       }
-      particles.forEach(p => {
+      for (const p of particles) {
         ctx.beginPath()
         ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2)
         ctx.fillStyle = p.color + Math.floor(p.alpha * 255).toString(16).padStart(2, '0')
@@ -151,11 +154,15 @@ export function ParticleBackground() {
         p.x += p.vx; p.y += p.vy
         if (p.x < 0 || p.x > canvas.width)  p.vx *= -1
         if (p.y < 0 || p.y > canvas.height) p.vy *= -1
-      })
+      }
       raf = requestAnimationFrame(draw)
     }
     draw()
-    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', resize) }
+
+    return () => {
+      cancelAnimationFrame(raf)
+      window.removeEventListener('resize', resize)
+    }
   }, [variant])
 
   return (

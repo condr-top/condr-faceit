@@ -2,14 +2,16 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useSheetDrag } from '@/lib/useSheetDrag'
 import { api } from '@/lib/api'
+import { Icon, IconName } from '@/components/ui/Icon'
 
-const REASONS = [
-  { key: 'cheat', label: '🎮 Читерство' },
-  { key: 'insult', label: '🤬 Оскорбления' },
-  { key: 'afk', label: '💤 АФК / саботаж' },
-  { key: 'fake_result', label: '📸 Фейковый результат' },
-  { key: 'other', label: '❓ Другое' },
+const REASONS: { key: string; icon: IconName; label: string }[] = [
+  { key: 'cheat', icon: 'gamepad', label: 'Читерство' },
+  { key: 'insult', icon: 'warning', label: 'Оскорбления' },
+  { key: 'afk', icon: 'hourglass', label: 'АФК / саботаж' },
+  { key: 'fake_result', icon: 'camera', label: 'Фейковый результат' },
+  { key: 'other', icon: 'help', label: 'Другое' },
 ]
 
 interface ReportModalProps {
@@ -19,6 +21,7 @@ interface ReportModalProps {
 }
 
 export function ReportModal({ reportedId, reportedName, onClose }: ReportModalProps) {
+  const sheet = useSheetDrag(onClose)
   const [reason, setReason] = useState('')
   const [description, setDescription] = useState('')
   const [loading, setLoading] = useState(false)
@@ -48,6 +51,7 @@ export function ReportModal({ reportedId, reportedName, onClose }: ReportModalPr
         onClick={e => { if (e.target === e.currentTarget) onClose() }}
       >
         <motion.div
+          {...sheet.panelProps}
           initial={{ y: '100%' }}
           animate={{ y: 0 }}
           exit={{ y: '100%' }}
@@ -60,11 +64,13 @@ export function ReportModal({ reportedId, reportedName, onClose }: ReportModalPr
             borderBottom: 'none',
           }}
         >
-          <div className="w-10 h-1 rounded-full mx-auto mb-5" style={{ background: 'rgba(255,255,255,0.2)' }} />
+          <div {...sheet.handleProps} style={{ ...sheet.handleProps.style, padding: '0 0 16px' }}>
+            <div className="w-10 h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.2)' }} />
+          </div>
 
           {done ? (
             <div className="text-center py-4">
-              <div className="text-5xl mb-4">✅</div>
+              <div className="mb-4 flex justify-center" style={{ color: '#22C55E' }}><Icon name="check-circle" size={52} strokeWidth={1.6} /></div>
               <h2 className="text-xl font-bold text-white mb-2">Репорт отправлен</h2>
               <p className="text-sm mb-6" style={{ color: '#9CA3AF' }}>
                 Администратор рассмотрит жалобу в ближайшее время
@@ -83,14 +89,14 @@ export function ReportModal({ reportedId, reportedName, onClose }: ReportModalPr
                   <button
                     key={r.key}
                     onClick={() => setReason(r.key)}
-                    className="w-full px-4 py-3 rounded-xl text-left text-sm font-medium transition-all"
+                    className="w-full px-4 py-3 rounded-xl text-left text-sm font-medium transition-all flex items-center gap-2"
                     style={{
                       background: reason === r.key ? 'rgba(232,9,46,0.15)' : 'rgba(255,255,255,0.05)',
                       border: `1px solid ${reason === r.key ? '#E8092E' : 'rgba(255,255,255,0.08)'}`,
                       color: reason === r.key ? '#fff' : '#9CA3AF',
                     }}
                   >
-                    {r.label}
+                    <Icon name={r.icon} size={15} />{r.label}
                   </button>
                 ))}
               </div>

@@ -1,7 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, LessThan, MoreThan } from 'typeorm';
 import { Notification } from './entities/notification.entity';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const cutoff = () => new Date(Date.now() - DAY_MS); // уведомления храним 24 часа
 
 @Injectable()
 export class NotificationsService {
@@ -14,8 +17,10 @@ export class NotificationsService {
   }
 
   async getUserNotifications(userId: number) {
+    // Чистим всё старше 24ч и отдаём только свежие
+    await this.notifRepo.delete({ userId, createdAt: LessThan(cutoff()) });
     return this.notifRepo.find({
-      where: { userId },
+      where: { userId, createdAt: MoreThan(cutoff()) },
       order: { createdAt: 'DESC' },
       take: 50,
     });
@@ -27,6 +32,7 @@ export class NotificationsService {
   }
 
   async getUnreadCount(userId: number): Promise<number> {
-    return this.notifRepo.count({ where: { userId, isRead: false } });
+    // Непрочитанные только за последние 24ч
+    return this.notifRepo.count({ where: { userId, isRead: false, createdAt: MoreThan(cutoff()) } });
   }
 }

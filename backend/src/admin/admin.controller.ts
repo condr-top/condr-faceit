@@ -15,11 +15,28 @@ import { AdminGuard } from '../auth/admin.guard';
 import { ModeratorGuard } from '../auth/moderator.guard';
 import { AdminService } from './admin.service';
 import { ReportStatus } from '../reports/entities/report.entity';
+import { DiscordService } from '../discord/discord.service';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard)
 export class AdminController {
-  constructor(private adminService: AdminService) {}
+  constructor(
+    private adminService: AdminService,
+    private discord: DiscordService,
+  ) {}
+
+  // ── Discord voice diagnostics (admin) ──────────────────────────────────────
+  @Get('discord/status')
+  @UseGuards(AdminGuard)
+  discordStatus() {
+    return this.discord.getStatus();
+  }
+
+  @Post('discord/test')
+  @UseGuards(AdminGuard)
+  discordTest() {
+    return this.discord.testVoice();
+  }
 
   // ── KD (moderator + admin) ────────────────────────────────────────────────
 
@@ -111,6 +128,30 @@ export class AdminController {
   @UseGuards(AdminGuard)
   setModerator(@Param('id', ParseIntPipe) id: number, @Body('isModerator') isModerator: boolean) {
     return this.adminService.setModerator(id, isModerator);
+  }
+
+  @Patch('users/:id/verified')
+  @UseGuards(AdminGuard)
+  setVerified(@Param('id', ParseIntPipe) id: number, @Body('isVerified') isVerified: boolean) {
+    return this.adminService.setVerified(id, isVerified);
+  }
+
+  @Patch('users/:id/dm-host')
+  @UseGuards(AdminGuard)
+  setDmHost(@Param('id', ParseIntPipe) id: number, @Body('isDmHost') isDmHost: boolean) {
+    return this.adminService.setDmHost(id, isDmHost);
+  }
+
+  @Patch('users/:id/cpl-access')
+  @UseGuards(AdminGuard)
+  setCplAccess(@Param('id', ParseIntPipe) id: number, @Body('value') value: boolean) {
+    return this.adminService.setCplAccess(id, value);
+  }
+
+  @Patch('users/:id/cplq-access')
+  @UseGuards(AdminGuard)
+  setCplqAccess(@Param('id', ParseIntPipe) id: number, @Body('value') value: boolean) {
+    return this.adminService.setCplqAccess(id, value);
   }
 
   @Patch('users/:id/coins')

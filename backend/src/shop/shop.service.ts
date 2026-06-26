@@ -58,6 +58,36 @@ export class ShopService {
     return this.inventoryRepo.save(inventory);
   }
 
+  /** Покупка подписки CONDR Premium за фиксированную цену (2990 COIN, +30 дней). */
+  async buyPremium(userId: number): Promise<any> {
+    const PRICE = 2990;
+    const DAYS = 30;
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    if (user.coins < PRICE) throw new BadRequestException('Недостаточно монет');
+
+    user.coins -= PRICE;
+    // Если премиум ещё активен — продлеваем от текущей даты окончания.
+    const base = user.premiumUntil && new Date(user.premiumUntil) > new Date() ? new Date(user.premiumUntil) : new Date();
+    base.setDate(base.getDate() + DAYS);
+    user.premiumUntil = base;
+    await this.userRepo.save(user);
+    return { ok: true, premiumUntil: user.premiumUntil, coins: user.coins };
+  }
+
+  /** Покупка доступа к CPL-Q (CONDR Pro League Qualifications) за 4990 COIN на текущий сезон. */
+  async buyCplq(userId: number): Promise<any> {
+    const PRICE = 4990;
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    if (user.cplqAccess) throw new BadRequestException('Доступ к CPL-Q уже есть на этот сезон');
+    if (user.coins < PRICE) throw new BadRequestException('Недостаточно монет');
+    user.coins -= PRICE;
+    user.cplqAccess = true;
+    await this.userRepo.save(user);
+    return { ok: true, coins: user.coins, cplqAccess: true };
+  }
+
   async getUserInventory(userId: number) {
     const items = await this.inventoryRepo.find({ where: { userId } });
     const itemIds = items.map((i) => i.itemId);

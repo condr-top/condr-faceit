@@ -6,6 +6,15 @@ import { join } from 'path';
 import { AppModule } from './app.module';
 import helmet from 'helmet';
 
+// Сетевые сбои внешних сервисов (Discord/Telegram под ТСПУ) не должны ронять бэкенд.
+// Без этого одна непойманная promise-ошибка (ConnectTimeout) крашит процесс в цикле.
+process.on('unhandledRejection', (reason: any) => {
+  console.error('[unhandledRejection]', reason?.message || reason);
+});
+process.on('uncaughtException', (err: any) => {
+  console.error('[uncaughtException]', err?.message || err);
+});
+
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 

@@ -9,35 +9,34 @@ import { Notification } from '../notifications/entities/notification.entity';
 // ─── Daily mission pool ───────────────────────────────────────────────────────
 const DAILY_POOL: Omit<Mission, 'id' | 'createdAt' | 'isActive'>[] = [
   // EASY
-  { title: 'Первый шаг',        description: 'Сыграй 1 матч',          missionKey: 'play_matches', goal: 1,  difficulty: MissionDifficulty.EASY,   type: MissionType.DAILY, rewardCoins: 30,  rewardXp: 50  },
-  { title: 'Убийца',            description: 'Набери 20 убийств',       missionKey: 'get_kills',    goal: 20, difficulty: MissionDifficulty.EASY,   type: MissionType.DAILY, rewardCoins: 40,  rewardXp: 60  },
-  { title: 'Помощник',          description: 'Набери 5 ассистов',       missionKey: 'get_assists',  goal: 5,  difficulty: MissionDifficulty.EASY,   type: MissionType.DAILY, rewardCoins: 30,  rewardXp: 50  },
-  { title: 'Первая победа',     description: 'Победи в 1 матче',        missionKey: 'win_matches',  goal: 1,  difficulty: MissionDifficulty.EASY,   type: MissionType.DAILY, rewardCoins: 50,  rewardXp: 80  },
-  { title: 'Выносливость',      description: 'Доиграй 3 матча до конца',missionKey: 'play_matches', goal: 3,  difficulty: MissionDifficulty.EASY,   type: MissionType.DAILY, rewardCoins: 45,  rewardXp: 75  },
+  { title: 'Первый шаг',        description: 'Сыграй 1 матч',          missionKey: 'play_matches', goal: 1,  difficulty: MissionDifficulty.EASY,   type: MissionType.DAILY, rewardCoins: 30  },
+  { title: 'Убийца',            description: 'Набери 20 убийств',       missionKey: 'get_kills',    goal: 20, difficulty: MissionDifficulty.EASY,   type: MissionType.DAILY, rewardCoins: 40  },
+  { title: 'Помощник',          description: 'Набери 5 ассистов',       missionKey: 'get_assists',  goal: 5,  difficulty: MissionDifficulty.EASY,   type: MissionType.DAILY, rewardCoins: 30  },
+  { title: 'Первая победа',     description: 'Победи в 1 матче',        missionKey: 'win_matches',  goal: 1,  difficulty: MissionDifficulty.EASY,   type: MissionType.DAILY, rewardCoins: 50  },
+  { title: 'Выносливость',      description: 'Доиграй 3 матча до конца',missionKey: 'play_matches', goal: 3,  difficulty: MissionDifficulty.EASY,   type: MissionType.DAILY, rewardCoins: 45  },
   // MEDIUM
-  { title: 'На разогреве',      description: 'Сыграй 3 матча',          missionKey: 'play_matches', goal: 3,  difficulty: MissionDifficulty.MEDIUM,  type: MissionType.DAILY, rewardCoins: 75,  rewardXp: 120 },
-  { title: 'Жнец',              description: 'Набери 40 убийств',       missionKey: 'get_kills',    goal: 40, difficulty: MissionDifficulty.MEDIUM,  type: MissionType.DAILY, rewardCoins: 80,  rewardXp: 130 },
-  { title: 'Поддержка команды', description: 'Набери 10 ассистов',      missionKey: 'get_assists',  goal: 10, difficulty: MissionDifficulty.MEDIUM,  type: MissionType.DAILY, rewardCoins: 60,  rewardXp: 100 },
-  { title: 'Победитель',        description: 'Победи в 2 матчах',       missionKey: 'win_matches',  goal: 2,  difficulty: MissionDifficulty.MEDIUM,  type: MissionType.DAILY, rewardCoins: 100, rewardXp: 150 },
-  { title: 'Лучший игрок',      description: 'Стань MVP 1 раз',         missionKey: 'become_mvp',   goal: 1,  difficulty: MissionDifficulty.MEDIUM,  type: MissionType.DAILY, rewardCoins: 90,  rewardXp: 140 },
+  { title: 'На разогреве',      description: 'Сыграй 3 матча',          missionKey: 'play_matches', goal: 3,  difficulty: MissionDifficulty.MEDIUM,  type: MissionType.DAILY, rewardCoins: 75 },
+  { title: 'Жнец',              description: 'Набери 40 убийств',       missionKey: 'get_kills',    goal: 40, difficulty: MissionDifficulty.MEDIUM,  type: MissionType.DAILY, rewardCoins: 80 },
+  { title: 'Поддержка команды', description: 'Набери 10 ассистов',      missionKey: 'get_assists',  goal: 10, difficulty: MissionDifficulty.MEDIUM,  type: MissionType.DAILY, rewardCoins: 60 },
+  { title: 'Победитель',        description: 'Победи в 2 матчах',       missionKey: 'win_matches',  goal: 2,  difficulty: MissionDifficulty.MEDIUM,  type: MissionType.DAILY, rewardCoins: 100 },
+  { title: 'Лучший игрок',      description: 'Стань MVP 1 раз',         missionKey: 'become_mvp',   goal: 1,  difficulty: MissionDifficulty.MEDIUM,  type: MissionType.DAILY, rewardCoins: 90 },
   // HARD
-  { title: 'Ветеран',           description: 'Сыграй 5 матчей',         missionKey: 'play_matches', goal: 5,  difficulty: MissionDifficulty.HARD,    type: MissionType.DAILY, rewardCoins: 150, rewardXp: 200 },
-  { title: 'Машина смерти',     description: 'Набери 60 убийств',       missionKey: 'get_kills',    goal: 60, difficulty: MissionDifficulty.HARD,    type: MissionType.DAILY, rewardCoins: 160, rewardXp: 220 },
-  { title: 'Незаменимый',       description: 'Набери 20 ассистов',      missionKey: 'get_assists',  goal: 20, difficulty: MissionDifficulty.HARD,    type: MissionType.DAILY, rewardCoins: 120, rewardXp: 180 },
-  { title: 'Доминация',         description: 'Победи в 3 матчах',       missionKey: 'win_matches',  goal: 3,  difficulty: MissionDifficulty.HARD,    type: MissionType.DAILY, rewardCoins: 200, rewardXp: 250 },
-  { title: 'Звезда матча',      description: 'Стань MVP 2 раза',        missionKey: 'become_mvp',   goal: 2,  difficulty: MissionDifficulty.HARD,    type: MissionType.DAILY, rewardCoins: 180, rewardXp: 240 },
-  { title: 'Неудержимый',       description: 'Победи 2 матча подряд',   missionKey: 'win_streak',   goal: 2,  difficulty: MissionDifficulty.HARD,    type: MissionType.DAILY, rewardCoins: 200, rewardXp: 280 },
-  { title: 'Легенда дня',       description: 'Стань MVP 3 раза',        missionKey: 'become_mvp',   goal: 3,  difficulty: MissionDifficulty.HARD,    type: MissionType.DAILY, rewardCoins: 250, rewardXp: 320 },
+  { title: 'Ветеран',           description: 'Сыграй 5 матчей',         missionKey: 'play_matches', goal: 5,  difficulty: MissionDifficulty.HARD,    type: MissionType.DAILY, rewardCoins: 150 },
+  { title: 'Машина смерти',     description: 'Набери 60 убийств',       missionKey: 'get_kills',    goal: 60, difficulty: MissionDifficulty.HARD,    type: MissionType.DAILY, rewardCoins: 160 },
+  { title: 'Незаменимый',       description: 'Набери 20 ассистов',      missionKey: 'get_assists',  goal: 20, difficulty: MissionDifficulty.HARD,    type: MissionType.DAILY, rewardCoins: 120 },
+  { title: 'Доминация',         description: 'Победи в 3 матчах',       missionKey: 'win_matches',  goal: 3,  difficulty: MissionDifficulty.HARD,    type: MissionType.DAILY, rewardCoins: 200 },
+  { title: 'Звезда матча',      description: 'Стань MVP 2 раза',        missionKey: 'become_mvp',   goal: 2,  difficulty: MissionDifficulty.HARD,    type: MissionType.DAILY, rewardCoins: 180 },
+  { title: 'Неудержимый',       description: 'Победи 2 матча подряд',   missionKey: 'win_streak',   goal: 2,  difficulty: MissionDifficulty.HARD,    type: MissionType.DAILY, rewardCoins: 200 },
+  { title: 'Легенда дня',       description: 'Стань MVP 3 раза',        missionKey: 'become_mvp',   goal: 3,  difficulty: MissionDifficulty.HARD,    type: MissionType.DAILY, rewardCoins: 250 },
 ];
 
 const DAILY_BONUS_COINS = 100;
-const DAILY_BONUS_XP    = 200;
 
-const STREAK_REWARDS: Record<number, { coins: number; xp: number; label: string }> = {
-  3:  { coins: 150, xp: 300,  label: '3 дня подряд 🔥' },
-  7:  { coins: 500, xp: 700,  label: '7 дней подряд 💎' },
-  14: { coins: 1000, xp: 1500, label: '14 дней подряд 👑' },
-  30: { coins: 3000, xp: 5000, label: '30 дней подряд 🌟' },
+const STREAK_REWARDS: Record<number, { coins: number; label: string }> = {
+  3:  { coins: 150,  label: '3 дня подряд' },
+  7:  { coins: 500,  label: '7 дней подряд' },
+  14: { coins: 1000, label: '14 дней подряд' },
+  30: { coins: 3000, label: '30 дней подряд' },
 };
 
 function todayUTC(): string {
@@ -115,7 +114,6 @@ export class MissionsService implements OnModuleInit {
           difficulty:  m?.difficulty  ?? 'easy',
           goal:        m?.goal        ?? 1,
           rewardCoins: m?.rewardCoins ?? 0,
-          rewardXp:    m?.rewardXp    ?? 0,
           progress:    um.progress,
           isCompleted: um.isCompleted,
           isClaimed:   um.isClaimed,
@@ -124,7 +122,6 @@ export class MissionsService implements OnModuleInit {
       allCompleted,
       bonusClaimed,
       bonusCoins:    DAILY_BONUS_COINS,
-      bonusXp:       DAILY_BONUS_XP,
       missionStreak: user?.missionStreak ?? 0,
       msUntilReset:  Math.max(0, msLeft),
     };
@@ -182,11 +179,9 @@ export class MissionsService implements OnModuleInit {
 
     const user = await this.userRepo.findOne({ where: { id: userId } });
     user.coins += m.rewardCoins;
-    user.xp    += m.rewardXp;
-    user.level  = Math.floor(Math.sqrt(user.xp / 100)) + 1;
     await this.userRepo.save(user);
 
-    return { coins: m.rewardCoins, xp: m.rewardXp };
+    return { coins: m.rewardCoins };
   }
 
   // ── Claim daily bonus (all 3 done) ─────────────────────────────────────────
@@ -220,14 +215,11 @@ export class MissionsService implements OnModuleInit {
     user.missionStreakLastDate = today;
 
     user.coins += DAILY_BONUS_COINS;
-    user.xp    += DAILY_BONUS_XP;
-    user.level  = Math.floor(Math.sqrt(user.xp / 100)) + 1;
 
     // Streak milestone reward
     const streakReward = STREAK_REWARDS[user.missionStreak];
     if (streakReward) {
       user.coins += streakReward.coins;
-      user.xp    += streakReward.xp;
     }
 
     await this.userRepo.save(user);
@@ -236,16 +228,15 @@ export class MissionsService implements OnModuleInit {
     await this.notifRepo.save(this.notifRepo.create({
       userId,
       type:  'mission_bonus',
-      title: '🎯 Все задания выполнены!',
+      title: 'Все задания выполнены!',
       body:  streakReward
-        ? `Бонус получен! ${streakReward.label} — +${DAILY_BONUS_COINS + streakReward.coins}🪙 +${DAILY_BONUS_XP + streakReward.xp}XP`
-        : `Ежедневный бонус: +${DAILY_BONUS_COINS}🪙 +${DAILY_BONUS_XP}XP. Стрик: ${user.missionStreak} дней 🔥`,
+        ? `Бонус получен! ${streakReward.label} — +${DAILY_BONUS_COINS + streakReward.coins} монет`
+        : `Ежедневный бонус: +${DAILY_BONUS_COINS} монет. Стрик: ${user.missionStreak} дней`,
       meta: { streak: user.missionStreak },
     }));
 
     return {
       coins:          DAILY_BONUS_COINS + (streakReward?.coins ?? 0),
-      xp:             DAILY_BONUS_XP    + (streakReward?.xp    ?? 0),
       missionStreak:  user.missionStreak,
       streakReward:   streakReward ?? null,
     };

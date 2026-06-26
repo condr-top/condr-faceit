@@ -19,7 +19,4 @@ export class Achievement {
 
   @Column({ name: 'reward_coins', default: 0 })
   rewardCoins: number;
-
-  @Column({ name: 'reward_xp', default: 0 })
-  rewardXp: number;
 }

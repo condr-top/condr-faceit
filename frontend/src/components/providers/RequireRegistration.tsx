@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { useAuthStore } from '@/store/authStore'
 import { LoadingScreen } from '@/components/ui/LoadingScreen'
 import { api } from '@/lib/api'
+import { Icon } from '@/components/ui/Icon'
 
 function BannedScreen({ reason }: { reason: string | null }) {
   return (
@@ -18,7 +19,7 @@ function BannedScreen({ reason }: { reason: string | null }) {
       padding: '24px',
       textAlign: 'center',
     }}>
-      <div style={{ fontSize: 64, marginBottom: 16 }}>🚫</div>
+      <div style={{ marginBottom: 16, color: '#EF4444', display: 'flex' }}><Icon name="ban" size={64} strokeWidth={1.5} /></div>
       <h1 style={{
         fontSize: 24, fontWeight: 900, color: '#EF4444',
         marginBottom: 8, letterSpacing: '-0.5px',
@@ -53,14 +54,21 @@ function BannedScreen({ reason }: { reason: string | null }) {
 }
 
 export function RequireRegistration({ children }: { children: React.ReactNode }) {
-  const { user, isAuthenticated, isLoading } = useAuthStore()
+  const { user, isAuthenticated, isLoading, hydrateFromToken } = useAuthStore()
   const router = useRouter()
   const pathname = usePathname()
 
   useEffect(() => {
     if (isLoading) return
     if (!isAuthenticated) {
-      router.replace('/auth')
+      // Сайт (браузер без Telegram): восстанавливаем сессию из сохранённого токена.
+      const token = typeof window !== 'undefined' ? localStorage.getItem('condr_faceit_token') : null
+      const inTelegram = !!(window as any).Telegram?.WebApp?.initData
+      if (token && !inTelegram) {
+        hydrateFromToken().then((ok) => { if (!ok) router.replace('/web/login') })
+        return
+      }
+      router.replace(inTelegram ? '/auth' : '/web/login')
       return
     }
     if (user && !user.isRegistered) {

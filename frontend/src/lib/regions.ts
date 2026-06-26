@@ -1,10 +1,3 @@
-export function countryFlag(code: string): string {
-  if (!code || code.length !== 2) return '🌍'
-  return code.toUpperCase().split('').map(c =>
-    String.fromCodePoint(c.charCodeAt(0) + 127397)
-  ).join('')
-}
-
 export const REGIONS: { code: string; name: string }[] = [
   { code: 'RU', name: 'Россия' },
   { code: 'UA', name: 'Украина' },

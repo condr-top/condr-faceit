@@ -23,4 +23,24 @@ export class AuthController {
   getMe(@Request() req: any) {
     return req.user;
   }
+
+  // ── Web auth ──
+  /** Вебапп: сгенерировать код привязки для входа на сайте. */
+  @Post('web/pair')
+  @UseGuards(JwtAuthGuard)
+  createWebPairing(@Request() req: any) {
+    return this.authService.createWebPairing(req.user.id);
+  }
+
+  /** Сайт: погасить код привязки → JWT того же аккаунта. */
+  @Post('web/redeem')
+  redeemWebPairing(@Body('code') code: string) {
+    return this.authService.redeemWebPairing(code);
+  }
+
+  /** Сайт: вход через Telegram Login Widget. */
+  @Post('telegram-widget')
+  telegramWidget(@Body() body: Record<string, any>) {
+    return this.authService.telegramWidgetLogin(body);
+  }
 }

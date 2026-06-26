@@ -683,7 +683,7 @@ export default function DashboardPage() {
                       {/* красный значок-бейдж — акцент на тёмной кнопке */}
                       <div style={{ position: 'relative', width: 42, height: 42, borderRadius: 13, flexShrink: 0, background: 'linear-gradient(135deg, #E8092E, #b4001e)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 6px 18px rgba(232,9,46,0.5), inset 0 1px 0 rgba(255,255,255,0.28)' }}>
                         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '45%', borderRadius: '13px 13px 0 0', background: 'linear-gradient(180deg, rgba(255,255,255,0.3), transparent)', pointerEvents: 'none' }} />
-                        {!isOnCooldown && !lobbyLoading && <motion.div animate={{ opacity: [0, 0.5, 0], scale: [0.8, 1.45, 0.8] }} transition={{ duration: 2.1, repeat: Infinity, ease: 'easeInOut' }} style={{ position: 'absolute', inset: -3, borderRadius: 16, border: '1.5px solid rgba(232,9,46,0.7)', pointerEvents: 'none' }} />}
+                        {!isOnCooldown && !lobbyLoading && <motion.div animate={{ opacity: [0, 0.5, 0], scale: [0.92, 1.12, 0.92] }} transition={{ duration: 2.1, repeat: Infinity, ease: 'easeInOut' }} style={{ position: 'absolute', inset: -2, borderRadius: 15, border: '1.5px solid rgba(232,9,46,0.7)', pointerEvents: 'none' }} />}
                         <motion.div animate={lobbyLoading ? { rotate: 360 } : { scale: [1, 1.12, 1] }} transition={lobbyLoading ? { duration: 0.9, repeat: Infinity, ease: 'linear' } : { duration: 2.2, repeat: Infinity, ease: 'easeInOut' }} style={{ display: 'flex', position: 'relative' }}>
                           <Icon name="swords" size={22} color="#fff" />
                         </motion.div>

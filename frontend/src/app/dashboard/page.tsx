@@ -536,14 +536,18 @@ export default function DashboardPage() {
                 <motion.div
                   initial={false}
                   animate={{ x: `${activeIdx * 100}%` }}
-                  transition={{ type: 'spring', stiffness: 360, damping: 32 }}
-                  style={{ position: 'absolute', top: 4, bottom: 4, left: 4, width: 'calc((100% - 8px) / 3)', borderRadius: 10, background: 'linear-gradient(135deg, #E8092E, #b4001e)', boxShadow: '0 2px 9px rgba(232,9,46,0.3)', zIndex: 0, willChange: 'transform', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}
-                />
+                  transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                  style={{ position: 'absolute', top: 4, bottom: 4, left: 4, width: 'calc((100% - 8px) / 3)', borderRadius: 10, overflow: 'hidden', background: 'linear-gradient(135deg, #ff1f43, #b4001e)', boxShadow: '0 4px 16px rgba(232,9,46,0.45), inset 0 1px 0 rgba(255,255,255,0.28)', zIndex: 0, willChange: 'transform', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}
+                >
+                  <div style={{ position: 'absolute', top: 0, left: '14%', right: '14%', height: 1, background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.55), transparent)' }} />
+                  <motion.div animate={{ x: ['-160%', '260%'] }} transition={{ duration: 2.8, repeat: Infinity, repeatDelay: 1.6, ease: 'easeInOut' }}
+                    style={{ position: 'absolute', top: 0, bottom: 0, width: '45%', transform: 'skewX(-18deg)', background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.28), transparent)' }} />
+                </motion.div>
                 {tabs.map(m => {
                   const active = mode === m.key
                   return (
                     <button key={m.key} onClick={() => m.locked ? alert('Доступ к лиге выдаёт администратор') : setMode(m.key)}
-                      style={{ flex: 1, position: 'relative', zIndex: 1, padding: '9px 0', border: 'none', cursor: 'pointer', background: 'none', borderRadius: 10, fontSize: 12.5, fontWeight: 800, color: active ? '#fff' : m.locked ? '#4B5563' : '#9CA3AF', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, transition: 'color .25s ease' }}>
+                      style={{ flex: 1, position: 'relative', zIndex: 1, padding: '10px 0', border: 'none', cursor: 'pointer', background: 'none', borderRadius: 10, fontSize: 12.5, fontWeight: 800, color: active ? '#fff' : m.locked ? '#4B5563' : '#9CA3AF', textShadow: active ? '0 1px 8px rgba(0,0,0,0.35)' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, transition: 'color .25s ease' }}>
                       {m.locked && <Icon name="lock" size={12} color="#4B5563" />}{m.label}
                     </button>
                   )
@@ -644,49 +648,65 @@ export default function DashboardPage() {
                   </div>
                 </motion.div>
               ) : (
-                <motion.button
-                  key="lobby-off"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  whileTap={{ scale: 0.97 }}
-                  disabled={lobbyLoading || !!isOnCooldown}
-                  onClick={findOrCreateLobby}
-                  style={{
-                    width: '100%', borderRadius: 16, border: 'none', cursor: 'pointer',
-                    background: 'linear-gradient(135deg, rgba(232,9,46,0.9) 0%, rgba(180,0,30,0.95) 100%)',
-                    padding: '18px 0', position: 'relative', overflow: 'hidden',
-                    boxShadow: isOnCooldown ? 'none' : '0 4px 32px rgba(232,9,46,0.35), inset 0 1px 0 rgba(255,255,255,0.1)',
-                    opacity: (lobbyLoading || !!isOnCooldown) ? 0.5 : 1,
-                  }}
-                >
-                  {!isOnCooldown && (
-                    <motion.div
-                      animate={{ x: ['-100%', '200%'] }}
-                      transition={{ duration: 2.5, repeat: Infinity, repeatDelay: 3 }}
-                      style={{ position: 'absolute', top: 0, bottom: 0, width: '35%', background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent)', pointerEvents: 'none' }}
-                    />
+                <motion.div key="lobby-off" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'relative' }}>
+                  {/* breathing halo (GPU-safe radial, no blur filter) */}
+                  {!isOnCooldown && !lobbyLoading && (
+                    <motion.div aria-hidden animate={{ opacity: [0.4, 0.85, 0.4], scale: [0.97, 1.03, 0.97] }} transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
+                      style={{ position: 'absolute', inset: -9, borderRadius: 28, background: 'radial-gradient(55% 62% at 50% 50%, rgba(232,9,46,0.55), transparent 72%)', zIndex: 0, pointerEvents: 'none' }} />
                   )}
-                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-                    <Icon name="swords" size={22} color="#fff" />
-                    <AnimatePresence mode="wait" initial={false}>
-                      <motion.div
-                        key={lobbyLoading ? 'loading' : mode}
-                        initial={{ opacity: 0, y: 6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -6 }}
-                        transition={{ duration: 0.18 }}
-                      >
-                        <div style={{ fontSize: 15, fontWeight: 900, color: '#fff', letterSpacing: '0.02em' }}>
-                          {lobbyLoading ? 'Подключаемся...' : mode === 'cpl' ? 'Найти матч · CPL' : mode === 'cplq' ? 'Найти матч · CPL-Q' : 'Найти матч'}
-                        </div>
-                        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)', fontWeight: 600, marginTop: 1 }}>
-                          {mode === 'cpl' ? 'CONDR Pro League · про-сцена' : mode === 'cplq' ? 'Квалификации в Pro League' : '5 на 5 · подбор по уровню'}
-                        </div>
-                      </motion.div>
-                    </AnimatePresence>
-                  </div>
-                </motion.button>
+                  <motion.button
+                    whileTap={{ scale: 0.975 }}
+                    disabled={lobbyLoading || !!isOnCooldown}
+                    onClick={findOrCreateLobby}
+                    style={{
+                      position: 'relative', zIndex: 1, width: '100%', borderRadius: 20, border: '1px solid rgba(255,255,255,0.14)', cursor: lobbyLoading || isOnCooldown ? 'default' : 'pointer',
+                      background: 'linear-gradient(135deg, #ff1230 0%, #E8092E 42%, #b4001e 100%)',
+                      padding: '21px 18px', overflow: 'hidden',
+                      boxShadow: isOnCooldown ? 'none' : '0 12px 40px rgba(232,9,46,0.42), inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -12px 28px rgba(0,0,0,0.22)',
+                      opacity: (lobbyLoading || !!isOnCooldown) ? 0.55 : 1,
+                    }}
+                  >
+                    {/* dotted texture */}
+                    <div style={{ position: 'absolute', inset: 0, opacity: 0.55, pointerEvents: 'none', backgroundImage: 'radial-gradient(rgba(255,255,255,0.13) 1px, transparent 1px)', backgroundSize: '14px 14px', WebkitMaskImage: 'radial-gradient(120% 120% at 28% 0%, #000 28%, transparent 72%)', maskImage: 'radial-gradient(120% 120% at 28% 0%, #000 28%, transparent 72%)' }} />
+                    {/* top inner highlight */}
+                    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '46%', background: 'linear-gradient(180deg, rgba(255,255,255,0.2), transparent)', pointerEvents: 'none' }} />
+                    {!isOnCooldown && !lobbyLoading && (<>
+                      {/* drifting hotspot */}
+                      <motion.div animate={{ x: ['-32%', '42%', '-32%'], y: ['-18%', '24%', '-18%'], opacity: [0.45, 0.8, 0.45] }} transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut' }}
+                        style={{ position: 'absolute', top: '50%', left: '50%', width: '70%', height: '190%', transform: 'translate(-50%,-50%)', background: 'radial-gradient(circle, rgba(255,140,160,0.55), transparent 60%)', mixBlendMode: 'screen', pointerEvents: 'none' }} />
+                      {/* sheen sweep */}
+                      <motion.div animate={{ x: ['-150%', '250%'] }} transition={{ duration: 2.7, repeat: Infinity, repeatDelay: 2.3, ease: 'easeInOut' }}
+                        style={{ position: 'absolute', top: 0, bottom: 0, width: '42%', transform: 'skewX(-18deg)', background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)', pointerEvents: 'none' }} />
+                    </>)}
+
+                    <div style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 13 }}>
+                      {/* glassy icon badge */}
+                      <div style={{ position: 'relative', width: 42, height: 42, borderRadius: 13, flexShrink: 0, background: 'rgba(255,255,255,0.16)', border: '1px solid rgba(255,255,255,0.32)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.35)' }}>
+                        {!isOnCooldown && !lobbyLoading && <motion.div animate={{ opacity: [0, 0.55, 0], scale: [0.8, 1.4, 0.8] }} transition={{ duration: 2.1, repeat: Infinity, ease: 'easeInOut' }} style={{ position: 'absolute', inset: -3, borderRadius: 16, border: '1.5px solid rgba(255,255,255,0.55)', pointerEvents: 'none' }} />}
+                        <motion.div animate={lobbyLoading ? { rotate: 360 } : { scale: [1, 1.12, 1] }} transition={lobbyLoading ? { duration: 0.9, repeat: Infinity, ease: 'linear' } : { duration: 2.2, repeat: Infinity, ease: 'easeInOut' }} style={{ display: 'flex' }}>
+                          <Icon name="swords" size={22} color="#fff" />
+                        </motion.div>
+                      </div>
+
+                      <AnimatePresence mode="wait" initial={false}>
+                        <motion.div key={lobbyLoading ? 'loading' : mode} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }} style={{ textAlign: 'left' }}>
+                          <div style={{ fontSize: 18, fontWeight: 900, color: '#fff', letterSpacing: '0.01em', lineHeight: 1.05, textShadow: '0 2px 12px rgba(0,0,0,0.32)' }}>
+                            {lobbyLoading ? 'Подключаемся…' : mode === 'cpl' ? 'Найти матч · CPL' : mode === 'cplq' ? 'Найти матч · CPL-Q' : 'Найти матч'}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)', fontWeight: 600, marginTop: 2 }}>
+                            {mode === 'cpl' ? 'CONDR Pro League · про-сцена' : mode === 'cplq' ? 'Квалификации в Pro League' : '5 на 5 · подбор по уровню'}
+                          </div>
+                        </motion.div>
+                      </AnimatePresence>
+
+                      {!lobbyLoading && !isOnCooldown && (
+                        <motion.div animate={{ x: [0, 5, 0] }} transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }} style={{ marginLeft: 2, display: 'flex' }}>
+                          <Icon name="chevronRight" size={20} color="rgba(255,255,255,0.92)" />
+                        </motion.div>
+                      )}
+                    </div>
+                  </motion.button>
+                </motion.div>
               )}
             </AnimatePresence>
           </motion.div>

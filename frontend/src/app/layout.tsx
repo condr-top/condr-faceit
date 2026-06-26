@@ -7,6 +7,7 @@ import { NavigationProgress } from '@/components/layout/NavigationProgress'
 import { BetaBanner } from '@/components/ui/BetaBanner'
 import { SwipeNavProvider } from '@/components/providers/SwipeNavProvider'
 import { PwaInstall } from '@/components/pwa/PwaInstall'
+import { ForceRegionGate } from '@/components/providers/ForceRegionGate'
 
 export const metadata: Metadata = {
   title: 'CONDR | Faceit',
@@ -51,6 +52,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               и оказывается под навбаром (zIndex:40). Здесь — поверх всего. */}
           <BetaBanner />
           <PwaInstall />
+          <ForceRegionGate />
         </TelegramProvider>
       </body>
     </html>

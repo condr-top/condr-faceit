@@ -712,8 +712,14 @@ export default function DashboardPage() {
             </AnimatePresence>
           </motion.div>
 
-          {/* ── PARTY / SQUAD — squad modifier for ranked matchmaking ── */}
-          {!lobby && <PartyPanel party={party} invitations={invitations} refresh={loadParty} />}
+          {/* ── PARTY / SQUAD — только в обычном режиме (CPL/CPL-Q — соло) ── */}
+          {!lobby && mode === 'normal' && <PartyPanel party={party} invitations={invitations} refresh={loadParty} />}
+          {!lobby && mode !== 'normal' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', marginBottom: 14, borderRadius: 14, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, background: 'rgba(245,158,11,0.14)', border: '1px solid rgba(245,158,11,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="user" size={17} color="#F59E0B" /></div>
+              <div style={{ fontSize: 12.5, color: '#9CA3AF', lineHeight: 1.4 }}><b style={{ color: '#fff' }}>{mode === 'cpl' ? 'CPL' : 'CPL-Q'} — только соло-подбор.</b> Отряды доступны лишь в обычном режиме.</div>
+            </div>
+          )}
 
           {/* ── SECONDARY MODE HEADER ── */}
           <motion.div

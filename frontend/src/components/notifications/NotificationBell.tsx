@@ -105,13 +105,21 @@ export function NotificationBell() {
 
   const acceptParty = async (n: Notification) => {
     setBusy(n.id)
-    try { await api.post('/party/accept', { partyId: n.meta?.partyId }); setNotifications(l => l.filter(x => x.id !== n.id)); close(); router.push('/dashboard') }
+    try {
+      await api.post('/party/accept', { partyId: n.meta?.partyId })
+      api.delete(`/notifications/${n.id}`).catch(() => {})
+      setNotifications(l => l.filter(x => x.id !== n.id)); close(); router.push('/dashboard')
+    }
     catch (e: any) { alert(e?.response?.data?.message || 'Не удалось принять') }
     finally { setBusy(null) }
   }
   const declineParty = async (n: Notification) => {
     setBusy(n.id)
-    try { await api.post('/party/decline', { partyId: n.meta?.partyId }); setNotifications(l => l.filter(x => x.id !== n.id)) }
+    try {
+      await api.post('/party/decline', { partyId: n.meta?.partyId })
+      api.delete(`/notifications/${n.id}`).catch(() => {})
+      setNotifications(l => l.filter(x => x.id !== n.id))
+    }
     catch {} finally { setBusy(null) }
   }
 

@@ -1,11 +1,12 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/store/authStore'
 import { Avatar } from '@/components/ui/Avatar'
-import { Icon } from '@/components/ui/Icon'
+import { Icon, IconName } from '@/components/ui/Icon'
 import { useSheetDrag } from '@/lib/useSheetDrag'
 
 const ACCENT = '#E8092E'
@@ -119,14 +120,58 @@ function EmptySlot({ canInvite, onInvite }: { canInvite: boolean; onInvite: () =
   )
 }
 
-function LockedSlot() {
+function LockedSlot({ onClick }: { onClick?: () => void }) {
   return (
     <Slot>
-      <div style={{ width: 52, height: 52, borderRadius: '50%', border: '1px solid rgba(234,179,8,0.3)', background: 'linear-gradient(135deg, rgba(234,179,8,0.12), rgba(255,255,255,0.02))', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <button onClick={onClick} style={{ width: 52, height: 52, borderRadius: '50%', border: '1px solid rgba(234,179,8,0.3)', background: 'linear-gradient(135deg, rgba(234,179,8,0.12), rgba(255,255,255,0.02))', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: onClick ? 'pointer' : 'default', padding: 0 }}>
         <Icon name="lock" size={18} color="#EAB308" />
-      </div>
+      </button>
       <div style={{ fontSize: 8.5, fontWeight: 900, color: '#EAB308', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Premium</div>
     </Slot>
+  )
+}
+
+// ── Premium-апселл при клике на закрытый слот ────────────────────────────────────
+function PremiumGuideSheet({ onClose }: { onClose: () => void }) {
+  const router = useRouter()
+  const sheet = useSheetDrag(onClose)
+  const GOLD = '#EAB308'
+  const perks: { icon: IconName; t: string; s: string }[] = [
+    { icon: 'users', t: 'Отряд до 5 человек', s: 'Зови полную пятёрку, а не троих' },
+    { icon: 'verified', t: 'Галочка и приоритет', s: 'Заметный статус и поддержка вне очереди' },
+    { icon: 'sparkles', t: 'Бонусы и скидки', s: 'Монеты, оформление профиля и не только' },
+  ]
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}
+      style={{ position: 'fixed', inset: 0, zIndex: 120, background: 'rgba(0,0,0,0.74)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      <motion.div {...sheet.panelProps} initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 30, stiffness: 300 }} onClick={e => e.stopPropagation()}
+        style={{ width: '100%', maxWidth: 520, position: 'relative', overflow: 'hidden', background: 'radial-gradient(120% 90% at 50% 0%, rgba(234,179,8,0.16), transparent 55%), linear-gradient(180deg, #121009, #0a0a0f)', borderRadius: '26px 26px 0 0', border: '1px solid rgba(234,179,8,0.28)', borderBottom: 'none', padding: 22, paddingBottom: 32 }}>
+        <div {...sheet.handleProps} style={{ ...sheet.handleProps.style, padding: '4px 0 16px' }}><div style={{ width: 42, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.2)' }} /></div>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+          <motion.div animate={{ scale: [1, 1.06, 1] }} transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+            style={{ width: 64, height: 64, borderRadius: 20, background: `linear-gradient(135deg, ${GOLD}, #ca8a04)`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 10px 30px ${GOLD}55`, position: 'relative' }}>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '45%', borderRadius: '20px 20px 0 0', background: 'linear-gradient(180deg, rgba(255,255,255,0.35), transparent)' }} />
+            <Icon name="gem" size={30} color="#1a1200" />
+          </motion.div>
+        </div>
+        <div style={{ textAlign: 'center', marginBottom: 18 }}>
+          <div style={{ fontSize: 21, fontWeight: 900, color: '#fff', letterSpacing: '-0.3px' }}>Слот только для Premium</div>
+          <div style={{ fontSize: 13, color: '#9CA3AF', marginTop: 5, lineHeight: 1.45 }}>Открой полный отряд на <b style={{ color: GOLD }}>5 человек</b> и другие плюшки с Premium-подпиской.</div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 18 }}>
+          {perks.map(p => (
+            <div key={p.t} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 13px', borderRadius: 14, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(234,179,8,0.16)' }}>
+              <div style={{ width: 38, height: 38, borderRadius: 11, flexShrink: 0, background: `${GOLD}16`, border: `1px solid ${GOLD}33`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name={p.icon} size={19} color={GOLD} /></div>
+              <div style={{ flex: 1 }}><div style={{ fontSize: 14, fontWeight: 800, color: '#fff' }}>{p.t}</div><div style={{ fontSize: 11.5, color: '#6B7280', marginTop: 1 }}>{p.s}</div></div>
+            </div>
+          ))}
+        </div>
+        <button onClick={() => { onClose(); router.push('/shop/premium') }} style={{ width: '100%', padding: '15px 0', borderRadius: 15, border: 'none', cursor: 'pointer', fontSize: 15, fontWeight: 900, color: '#1a1200', background: `linear-gradient(135deg, ${GOLD}, #ca8a04)`, boxShadow: `0 10px 28px ${GOLD}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <Icon name="gem" size={17} color="#1a1200" />Оформить Premium
+        </button>
+        <button onClick={onClose} style={{ width: '100%', marginTop: 9, padding: '11px 0', borderRadius: 12, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, color: '#6B7280', background: 'transparent' }}>Может позже</button>
+      </motion.div>
+    </motion.div>
   )
 }
 
@@ -197,6 +242,7 @@ function InviteModal({ excludeIds, onClose, onInvited }: { excludeIds: number[];
 function PartyMenu({ party, invitations, refresh, onClose }: { party: PartyDto | null; invitations: Invitation[]; refresh: () => void; onClose: () => void }) {
   const { user } = useAuthStore()
   const [showInvite, setShowInvite] = useState(false)
+  const [showPremium, setShowPremium] = useState(false)
   const [busy, setBusy] = useState(false)
 
   const act = async (fn: () => Promise<any>) => {
@@ -250,7 +296,7 @@ function PartyMenu({ party, invitations, refresh, onClose }: { party: PartyDto |
             return <PendingSlot key={`p${m.id}`} m={m} canCancel={amLeader} onCancel={() => act(() => api.post('/party/cancel-invite', { userId: m.id }))} />
           }
           if (i < maxSize) return <EmptySlot key={`e${i}`} canInvite={amLeader} onInvite={() => setShowInvite(true)} />
-          return <LockedSlot key={`l${i}`} />
+          return <LockedSlot key={`l${i}`} onClick={() => setShowPremium(true)} />
         })}
       </div>
 
@@ -277,6 +323,7 @@ function PartyMenu({ party, invitations, refresh, onClose }: { party: PartyDto |
 
       <AnimatePresence>
         {showInvite && <InviteModal excludeIds={excludeIds} onClose={() => setShowInvite(false)} onInvited={refresh} />}
+        {showPremium && <PremiumGuideSheet onClose={() => setShowPremium(false)} />}
       </AnimatePresence>
     </Sheet>
   )

@@ -26,6 +26,11 @@ export class NotificationsService {
     });
   }
 
+  async deleteOne(userId: number, id: number) {
+    await this.notifRepo.delete({ id, userId });
+    return { ok: true };
+  }
+
   async markAllRead(userId: number) {
     await this.notifRepo.update({ userId, isRead: false }, { isRead: true });
     return { ok: true };

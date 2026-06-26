@@ -52,8 +52,9 @@ export class UsersController {
     @Body('gameNickname') gameNickname: string,
     @Body('gameId') gameId: string,
     @Body('deviceSerial') deviceSerial: string,
+    @Body('region') region: string,
   ) {
-    return this.usersService.register(req.user.id, gameNickname, gameId, deviceSerial);
+    return this.usersService.register(req.user.id, gameNickname, gameId, deviceSerial, region);
   }
 
   @Post('change-nickname')

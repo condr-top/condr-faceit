@@ -91,7 +91,7 @@ interface AdminPurchase {
   createdAt: string
 }
 
-type TabId = 'stats' | 'users' | 'matches' | 'results' | 'reports' | 'purchases' | 'create' | 'kd' | 'support' | 'invite'
+type TabId = 'stats' | 'users' | 'matches' | 'results' | 'reports' | 'purchases' | 'create' | 'kd' | 'support' | 'invite' | 'achievements'
 
 interface SupportTicketRow {
   id: number
@@ -125,6 +125,7 @@ const ADMIN_TABS: { id: TabId; icon: IconName; label: string; badge?: (s: Stats 
   { id: 'kd',        icon: 'target',   label: 'K/D' },
   { id: 'support',   icon: 'chat',     label: 'Поддержка',  badge: (_s, sup) => sup ?? 0 },
   { id: 'invite',    icon: 'lock',     label: 'Инвайт' },
+  { id: 'achievements', icon: 'trophy', label: 'Ачивки' },
 ]
 
 const MOD_TABS: { id: TabId; icon: IconName; label: string }[] = [
@@ -300,6 +301,25 @@ export default function AdminPage() {
   // ── Invite code ──
   const [invite, setInvite] = useState<{ code: string; used: boolean; secondsLeft: number } | null>(null)
 
+  // ── Achievements grant ──
+  const [achCatalog, setAchCatalog] = useState<{ key: string; title: string; description: string; icon: IconName; color: string; category: string; rewardCoins: number; secret: boolean }[]>([])
+  const [achUserQuery, setAchUserQuery] = useState('')
+  const [achUserResults, setAchUserResults] = useState<AdminUser[]>([])
+  const [achUser, setAchUser] = useState<{ id: number; name: string } | null>(null)
+  const [achGranting, setAchGranting] = useState<string | null>(null)
+  const [achMsg, setAchMsg] = useState('')
+  const searchAchUser = async (q: string) => {
+    setAchUserQuery(q)
+    if (q.trim().length < 1) { setAchUserResults([]); return }
+    try { const r = await api.get('/admin/users', { params: { search: q.trim(), page: 1, limit: 8 } }); setAchUserResults(r.data.users) } catch {}
+  }
+  const grantAch = async (key: string) => {
+    if (!achUser) return
+    setAchGranting(key); setAchMsg('')
+    try { const r = await api.post('/achievements/admin/grant', { userId: achUser.id, key }); setAchMsg(r.data?.already ? 'Уже было выдано' : 'Выдано ✓') }
+    catch (e: any) { setAchMsg(e?.response?.data?.message || 'Ошибка') } finally { setAchGranting(null); setTimeout(() => setAchMsg(''), 2500) }
+  }
+
   // ── Discord voice diagnostics ──
   const [discordDiag, setDiscordDiag] = useState<any>(null)
   const [discordTesting, setDiscordTesting] = useState(false)
@@ -465,6 +485,7 @@ export default function AdminPage() {
     if (tab === 'reports') loadReports(reportFilter)
     if (tab === 'purchases') loadPurchases(purchaseFilter)
     if (tab === 'support') { loadTickets(ticketFilter); setOpenTicketId(null); setActiveTicket(null) }
+    if (tab === 'achievements' && achCatalog.length === 0) { api.get('/achievements/admin/catalog').then(r => setAchCatalog(r.data)).catch(() => {}) }
   }, [tab, user, ticketFilter])
 
   // Live-poll the invite code while the tab is open (updates code + used status every second)
@@ -1610,6 +1631,56 @@ export default function AdminPage() {
             </div>
             <div style={{ ...card, fontSize: 12, color: '#888', lineHeight: 1.55 }}>
               Передайте код игроку для входа в закрытый тест. Он действует до смены (раз в минуту) и только для одного человека — после использования становится недействительным до следующего обновления.
+            </div>
+          </div>
+        )}
+
+        {/* Achievements grant tab */}
+        {tab === 'achievements' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={card}>
+              <div style={{ fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 7 }}><Icon name="trophy" size={15} color="#EAB308" />Выдать достижение</div>
+              <div style={{ fontSize: 12, color: '#666', marginBottom: 12 }}>Найди игрока и выдай ему любое достижение вручную.</div>
+              {/* user search */}
+              {achUser ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)' }}>
+                  <Icon name="user" size={16} color="#22C55E" />
+                  <span style={{ flex: 1, fontSize: 14, fontWeight: 700, color: '#fff' }}>{achUser.name} <span style={{ color: '#6B7280', fontWeight: 500 }}>#{achUser.id}</span></span>
+                  <button onClick={() => { setAchUser(null); setAchUserQuery(''); setAchUserResults([]) }} style={{ background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: 8, padding: '6px 10px', color: '#9CA3AF', fontSize: 12, cursor: 'pointer' }}>Сменить</button>
+                </div>
+              ) : (
+                <div style={{ position: 'relative' }}>
+                  <input value={achUserQuery} onChange={e => searchAchUser(e.target.value)} placeholder="Поиск игрока по нику или ID…" style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '11px 14px', color: '#fff', fontSize: 14, outline: 'none' }} />
+                  {achUserResults.length > 0 && (
+                    <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto' }}>
+                      {achUserResults.map(u => (
+                        <button key={u.id} onClick={() => { setAchUser({ id: u.id, name: u.gameNickname || `User #${u.id}` }); setAchUserResults([]) }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', cursor: 'pointer', textAlign: 'left' }}>
+                          <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0, fontSize: 13 }}>{(u as any).avatarUrl ? <img src={(u as any).avatarUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (u.gameNickname?.[0] || '?').toUpperCase()}</div>
+                          <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: '#F3F4F6' }}>{u.gameNickname || `User #${u.id}`}</span>
+                          <span style={{ fontSize: 11, color: '#6B7280' }}>#{u.id}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              {achMsg && <div style={{ marginTop: 10, fontSize: 13, fontWeight: 700, color: achMsg.includes('✓') ? '#22C55E' : achMsg.includes('Уже') ? '#EAB308' : '#EF4444', textAlign: 'center' }}>{achMsg}</div>}
+            </div>
+
+            {/* catalog */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, opacity: achUser ? 1 : 0.5, pointerEvents: achUser ? 'auto' : 'none' }}>
+              {achCatalog.map(a => (
+                <div key={a.key} style={{ borderRadius: 14, padding: 13, background: 'rgba(255,255,255,0.03)', border: `1px solid ${a.color}26` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 11, flexShrink: 0, background: `linear-gradient(135deg, ${a.color}, ${a.color}99)`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 4px 12px ${a.color}40` }}><Icon name={a.icon} size={18} color="#fff" /></div>
+                    <div style={{ minWidth: 0 }}><div style={{ fontSize: 13.5, fontWeight: 800, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.title}{a.secret ? ' 🔒' : ''}</div><div style={{ fontSize: 10, color: '#EAB308', fontWeight: 700 }}>+{a.rewardCoins} coin</div></div>
+                  </div>
+                  <div style={{ fontSize: 11.5, color: '#6B7280', lineHeight: 1.4, marginBottom: 10, minHeight: 32 }}>{a.description}</div>
+                  <button onClick={() => grantAch(a.key)} disabled={!achUser || achGranting === a.key} style={{ width: '100%', padding: '9px 0', borderRadius: 10, border: 'none', cursor: achUser ? 'pointer' : 'not-allowed', fontSize: 12.5, fontWeight: 800, color: '#fff', background: `linear-gradient(135deg, ${a.color}, ${a.color}cc)`, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                    <Icon name="gift" size={13} color="#fff" />{achGranting === a.key ? '…' : 'Выдать'}
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
         )}

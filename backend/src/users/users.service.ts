@@ -77,7 +77,7 @@ export class UsersService {
     return { avatarUrl };
   }
 
-  async register(userId: number, gameNickname: string, gameId: string, deviceSerial: string): Promise<User> {
+  async register(userId: number, gameNickname: string, gameId: string, deviceSerial: string, region?: string): Promise<User> {
     const user = await this.findById(userId);
 
     // Once registered, serial and gameId are locked — only admins can change them
@@ -89,9 +89,14 @@ export class UsersService {
       if (!user.inviteRedeemed) {
         throw new BadRequestException('Сначала введите пригласительный код');
       }
+      if (!region?.trim()) {
+        throw new BadRequestException('Выберите регион');
+      }
       user.gameNickname = gameNickname.trim();
       user.gameId = gameId.trim();
       user.deviceSerial = deviceSerial.trim();
+      user.region = region.trim();
+      user.regionUpdatedAt = new Date();
       user.isRegistered = true;
     }
 

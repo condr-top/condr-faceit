@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { UserAchievement } from './entities/user-achievement.entity';
@@ -166,5 +166,33 @@ export class AchievementsService {
     await this.userRepo.save(user);
 
     return { coins: def.rewardCoins };
+  }
+
+  // ── ADMIN ───────────────────────────────────────────────────────────────────
+  /** Каталог достижений для админ-панели. */
+  getCatalog() {
+    return ACHIEVEMENTS.map((a) => ({
+      key: a.key, title: a.title, description: a.description,
+      icon: a.icon, color: a.color, category: a.category,
+      rewardCoins: a.rewardCoins, secret: !!(a as any).secret,
+    }));
+  }
+
+  /** Выдать достижение игроку вручную (из админки). */
+  async grantAchievement(userId: number, key: string) {
+    const def = ACHIEVEMENTS.find((a) => a.key === key);
+    if (!def) throw new BadRequestException('Достижение не найдено');
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('Игрок не найден');
+
+    const existing = await this.uaRepo.findOne({ where: { userId, achievementKey: key } });
+    if (existing) return { ok: true, already: true };
+
+    await this.uaRepo.save(this.uaRepo.create({ userId, achievementKey: key, claimed: false }));
+    await this.notifRepo.save(this.notifRepo.create({
+      userId, type: 'achievement', title: 'Достижение получено!',
+      body: def.title, meta: { redirect: '/missions' },
+    }));
+    return { ok: true };
   }
 }

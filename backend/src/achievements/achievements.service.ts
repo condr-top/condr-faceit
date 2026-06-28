@@ -7,6 +7,7 @@ import { CoinPurchase, PurchaseStatus } from '../coins/entities/coin-purchase.en
 import { MatchPlayer } from '../matches/entities/match-player.entity';
 import { Match, MatchStatus } from '../matches/entities/match.entity';
 import { Notification } from '../notifications/entities/notification.entity';
+import { withCoinBoost } from '../common/coin-boost';
 
 // ─── Catalog context (everything trackable about a player) ─────────────────────
 interface AchCtx {
@@ -162,7 +163,7 @@ export class AchievementsService {
     await this.uaRepo.save(row);
 
     const user = await this.userRepo.findOne({ where: { id: userId } });
-    user.coins += def.rewardCoins;
+    user.coins += withCoinBoost(user, def.rewardCoins);
     await this.userRepo.save(user);
 
     return { coins: def.rewardCoins };

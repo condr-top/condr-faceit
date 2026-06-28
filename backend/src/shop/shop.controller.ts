@@ -27,6 +27,32 @@ export class ShopController {
     return this.shopService.buyCplq(req.user.id);
   }
 
+  // ── Услуги ──
+  @Post('service/kd-reset')
+  kdReset(@Request() req: any) {
+    return this.shopService.kdReset(req.user.id);
+  }
+
+  @Post('service/clean-slate')
+  cleanSlate(@Request() req: any) {
+    return this.shopService.cleanSlate(req.user.id);
+  }
+
+  @Post('service/warn-remove')
+  warnRemove(@Request() req: any) {
+    return this.shopService.warnRemove(req.user.id);
+  }
+
+  @Post('service/boost')
+  buyBoost(@Request() req: any) {
+    return this.shopService.buyBoost(req.user.id);
+  }
+
+  @Post('service/condr-tag')
+  buyCondrTag(@Request() req: any) {
+    return this.shopService.buyCondrTag(req.user.id);
+  }
+
   @Post(':id/buy')
   buy(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
     return this.shopService.buyWithCoins(req.user.id, id);

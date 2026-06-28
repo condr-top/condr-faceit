@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like, In } from 'typeorm';
+import { Repository, Like, In, DataSource } from 'typeorm';
 import axios from 'axios';
 import { User } from '../users/entities/user.entity';
 import { Match, MatchStatus, MAPS } from '../matches/entities/match.entity';
@@ -34,6 +34,7 @@ export class AdminService implements OnModuleInit {
     private gateway: AppGateway,
     private missionsService: MissionsService,
     private discordService: DiscordService,
+    private dataSource: DataSource,
   ) {}
 
   async onModuleInit() {
@@ -312,6 +313,37 @@ export class AdminService implements OnModuleInit {
     user.isBanned = false;
     user.banReason = null;
     return this.userRepo.save(user);
+  }
+
+  /**
+   * Полное удаление аккаунта: чистим все связанные данные игрока и саму запись
+   * пользователя. Best-effort по таблицам (если колонки нет — просто пропускаем).
+   */
+  async deleteUser(id: number) {
+    const user = await this.userRepo.findOne({ where: { id } });
+    if (!user) throw new NotFoundException('Пользователь не найден');
+    const nickname = user.gameNickname || user.firstName || `id ${id}`;
+
+    // Таблицы со столбцом user_id — удаляем напрямую
+    const byUserId = [
+      'match_players', 'elo_history', 'notifications', 'user_achievements',
+      'user_missions', 'user_inventory', 'support_messages', 'support_tickets',
+      'coin_purchases', 'cpl_standings', 'cpl_weekly', 'clan_members', 'clan_requests',
+      'parties', 'party_members',
+    ];
+    for (const t of byUserId) {
+      try { await this.dataSource.query(`DELETE FROM ${t} WHERE user_id = $1`, [id]); }
+      catch { /* нет такой таблицы/колонки — пропускаем */ }
+    }
+    // Дружба — обе стороны
+    try { await this.dataSource.query('DELETE FROM friendships WHERE user_id = $1 OR friend_id = $1', [id]); } catch {}
+    // Жалобы — как от него, так и на него
+    try { await this.dataSource.query('DELETE FROM reports WHERE reporter_id = $1 OR reported_id = $1', [id]); } catch {}
+    // Инвайт-коды, которые он активировал — отвязываем
+    try { await this.dataSource.query('UPDATE invite_codes SET used_by_user_id = NULL WHERE used_by_user_id = $1', [id]); } catch {}
+
+    await this.userRepo.delete({ id });
+    return { ok: true, deleted: nickname };
   }
 
   async warnUser(id: number, reason?: string) {

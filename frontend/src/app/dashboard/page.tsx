@@ -792,8 +792,8 @@ export default function DashboardPage() {
           <MiniGameModal
             playsToday={user.miniGamePlaysToday ?? 0}
             onClose={() => setShowMiniGame(false)}
-            onWin={(coins, newPlays) => {
-              setShowMiniGame(false)
+            onWin={() => {
+              // Не закрываем — модалка сама предложит сыграть следующий уровень.
               refreshUser()
             }}
           />

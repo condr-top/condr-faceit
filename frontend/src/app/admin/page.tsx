@@ -561,6 +561,18 @@ export default function AdminPage() {
     }
   }
 
+  const deleteUserAccount = async (id: number, name: string) => {
+    if (!window.confirm(`Полностью удалить аккаунт «${name}» (#${id})? Будут стёрты профиль, статистика, история, друзья, тикеты. Действие необратимо.`)) return
+    if (!window.confirm(`Точно удалить «${name}»? Это нельзя отменить.`)) return
+    try {
+      await api.delete(`/admin/users/${id}`)
+      alert(`Аккаунт «${name}» удалён`)
+      loadUsers(userPage, userSearch)
+    } catch (e: any) {
+      alert(e?.response?.data?.message || 'Ошибка')
+    }
+  }
+
   const applyLeavePenalty = async (id: number, name: string) => {
     if (!confirm(`Штраф за leave/AFK для ${name}?\n-35 ELO + кулдаун (30м / 2ч / 24ч)`)) return
     try {
@@ -941,6 +953,7 @@ export default function AdminPage() {
                       )}
                       <button onClick={() => applyLeavePenalty(u.id, u.gameNickname || u.firstName)} style={{ ...btnSm('#EF4444', 'rgba(239,68,68,0.12)'), display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="logout" size={12} />Leave</button>
                       <button onClick={() => resetStats(u.id)} style={{ ...btnSm('#6366F1', 'rgba(99,102,241,0.12)'), display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="refresh" size={12} />Сброс стата</button>
+                      <button onClick={() => deleteUserAccount(u.id, u.gameNickname || u.firstName)} style={{ ...btnSm('#EF4444', 'rgba(239,68,68,0.18)'), display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 800 }}><Icon name="skull" size={12} />Удалить</button>
                     </div>
                   </div>
                 ))}

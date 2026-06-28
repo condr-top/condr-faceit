@@ -6,6 +6,7 @@ import { Friendship, FriendshipStatus } from './entities/friendship.entity';
 import { MatchPlayer } from '../matches/entities/match-player.entity';
 import { Match, MatchStatus } from '../matches/entities/match.entity';
 import { EloHistory } from './entities/elo-history.entity';
+import { withCoinBoost } from '../common/coin-boost';
 import { AppGateway } from '../gateway/app.gateway';
 import { InviteService } from '../invite/invite.service';
 
@@ -336,13 +337,14 @@ export class UsersService {
     }
 
     user.miniGamePlaysToday += 1;
-    user.coins += COINS_PER_WIN;
+    const reward = withCoinBoost(user, COINS_PER_WIN);
+    user.coins += reward;
     await this.userRepo.save(user);
 
     // Next difficulty = play count (0-indexed), capped at 9
     const nextDifficulty = Math.min(user.miniGamePlaysToday, MAX_PLAYS - 1);
 
-    return { coins: COINS_PER_WIN, playsToday: user.miniGamePlaysToday, nextDifficulty };
+    return { coins: reward, playsToday: user.miniGamePlaysToday, nextDifficulty };
   }
 
   async getEloHistory(userId: number) {

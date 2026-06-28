@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   ParseIntPipe,
@@ -92,6 +93,12 @@ export class AdminController {
   @UseGuards(AdminGuard)
   unban(@Param('id', ParseIntPipe) id: number) {
     return this.adminService.unbanUser(id);
+  }
+
+  @Delete('users/:id')
+  @UseGuards(AdminGuard)
+  deleteUser(@Param('id', ParseIntPipe) id: number) {
+    return this.adminService.deleteUser(id);
   }
 
   @Post('users/:id/warn')

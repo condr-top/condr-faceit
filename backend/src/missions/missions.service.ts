@@ -5,6 +5,7 @@ import { Mission, MissionType, MissionDifficulty } from './entities/mission.enti
 import { UserMission } from './entities/user-mission.entity';
 import { User } from '../users/entities/user.entity';
 import { Notification } from '../notifications/entities/notification.entity';
+import { withCoinBoost } from '../common/coin-boost';
 
 // ─── Daily mission pool ───────────────────────────────────────────────────────
 const DAILY_POOL: Omit<Mission, 'id' | 'createdAt' | 'isActive'>[] = [
@@ -178,10 +179,11 @@ export class MissionsService implements OnModuleInit {
     await this.userMissionRepo.save(um);
 
     const user = await this.userRepo.findOne({ where: { id: userId } });
-    user.coins += m.rewardCoins;
+    const reward = withCoinBoost(user, m.rewardCoins);
+    user.coins += reward;
     await this.userRepo.save(user);
 
-    return { coins: m.rewardCoins };
+    return { coins: reward };
   }
 
   // ── Claim daily bonus (all 3 done) ─────────────────────────────────────────
@@ -214,12 +216,12 @@ export class MissionsService implements OnModuleInit {
     }
     user.missionStreakLastDate = today;
 
-    user.coins += DAILY_BONUS_COINS;
+    user.coins += withCoinBoost(user, DAILY_BONUS_COINS);
 
     // Streak milestone reward
     const streakReward = STREAK_REWARDS[user.missionStreak];
     if (streakReward) {
-      user.coins += streakReward.coins;
+      user.coins += withCoinBoost(user, streakReward.coins);
     }
 
     await this.userRepo.save(user);

@@ -24,9 +24,21 @@ const TYPE_META: Record<string, { icon: IconName; color: string }> = {
 }
 
 const SECTIONS: { key: string; label: string; sub: string; color: string; icon: IconName; types: string[]; comingSoon?: boolean }[] = [
-  { key: 'services', label: 'Услуги',        sub: 'Буусты и полезные функции', color: '#22C55E', icon: 'bolt',     types: ['xp_boost', 'warn_remove'] },
   { key: 'custom',   label: 'Кастомизация',  sub: 'Рамки, цвета, оформление',  color: '#A855F7', icon: 'palette',  types: ['avatar_frame', 'nickname_color'] },
   { key: 'cases',    label: 'Кейсы',         sub: 'Открывай и забирай награды', color: '#60A5FA', icon: 'gift',     types: [], comingSoon: true },
+]
+
+// Услуги — вызывают отдельные эндпоинты бэка (цены — на сервере, здесь только витрина).
+interface Service {
+  key: string; title: string; desc: string; price: number; color: string; icon: IconName
+  endpoint: string; cta: string; confirm?: string; danger?: boolean
+}
+const SERVICES: Service[] = [
+  { key: 'coin_boost', title: 'Boost 2X', desc: 'Удвоение начисления CONDR COIN на 24 часа. Не распространяется на донат.', price: 1500, color: '#EAB308', icon: 'bolt', endpoint: '/shop/service/boost', cta: 'Активировать' },
+  { key: 'warn_remove', title: 'Снятие варна', desc: 'Убирает одно активное предупреждение с аккаунта.', price: 1500, color: '#22C55E', icon: 'shield', endpoint: '/shop/service/warn-remove', cta: 'Снять варн' },
+  { key: 'condr_tag', title: 'Тэг [CONDR]', desc: 'Внутриигровой тэг [CONDR]. Выдаст администратор прямо в игре.', price: 5000, color: '#A855F7', icon: 'sparkles', endpoint: '/shop/service/condr-tag', cta: 'Заказать', confirm: 'Заказать внутриигровой тэг [CONDR]? Администратор выдаст его в самой игре.' },
+  { key: 'kd_reset', title: 'Обнуление K/D', desc: 'Сброс статистики и истории матчей обычной лиги. ELO и ранг остаются.', price: 2500, color: '#F97316', icon: 'target', endpoint: '/shop/service/kd-reset', cta: 'Обнулить', danger: true, confirm: 'Обнулить K/D? Статистика и история матчей обычной лиги будут стёрты безвозвратно. ELO останется.' },
+  { key: 'clean_slate', title: 'Чистый лист', desc: 'Полный сброс: история матчей стёрта, ELO сброшен, повторная калибровка.', price: 4000, color: '#E8092E', icon: 'refresh', endpoint: '/shop/service/clean-slate', cta: 'Сбросить', danger: true, confirm: 'Начать с чистого листа? Вся история матчей будет стёрта, ELO сброшен до старта, потребуется повторная калибровка. Действие необратимо.' },
 ]
 
 // ── Big horizontal hero tile ────────────────────────────────────────────────────
@@ -98,6 +110,35 @@ function ItemCard({ item, delay, onBuy, buying, canAfford }: { item: ShopItem; d
   )
 }
 
+// ── Service card (полноширинная карточка услуги) ──────────────────────────────────
+function ServiceCard({ svc, delay, onBuy, buying, canAfford }: { svc: Service; delay: number; onBuy: () => void; buying: boolean; canAfford: boolean }) {
+  const c = svc.color
+  return (
+    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay, type: 'spring', stiffness: 300, damping: 24 }}
+      style={{ borderRadius: 16, padding: 14, background: `radial-gradient(120% 120% at 0% 0%, ${c}14, transparent 55%), #0f0f15`, border: `1px solid ${c}2e`, position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', gap: 13 }}>
+      <div style={{ position: 'absolute', top: 0, left: '12%', right: '12%', height: 1, background: `linear-gradient(90deg, transparent, ${c}88, transparent)` }} />
+      <div style={{ position: 'absolute', right: -10, top: '50%', transform: 'translateY(-50%)', opacity: 0.07, pointerEvents: 'none' }}><Icon name={svc.icon} size={92} color={c} /></div>
+      <div style={{ width: 46, height: 46, borderRadius: 13, flexShrink: 0, background: `${c}18`, border: `1px solid ${c}40`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Icon name={svc.icon} size={24} color={c} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <span style={{ fontSize: 14.5, fontWeight: 900, color: '#fff' }}>{svc.title}</span>
+          {svc.danger && <span style={{ fontSize: 8.5, fontWeight: 900, color: '#F87171', background: 'rgba(239,68,68,0.14)', border: '1px solid rgba(239,68,68,0.3)', padding: '2px 6px', borderRadius: 5, letterSpacing: '0.04em' }}>СБРОС</span>}
+        </div>
+        <div style={{ fontSize: 11, color: '#7C8493', marginTop: 3, lineHeight: 1.42 }}>{svc.desc}</div>
+      </div>
+      <motion.button whileTap={{ scale: 0.95 }} onClick={onBuy} disabled={buying}
+        style={{ flexShrink: 0, alignSelf: 'stretch', minWidth: 92, padding: '0 12px', borderRadius: 12, border: 'none', cursor: buying ? 'default' : 'pointer', fontSize: 13, fontWeight: 900, color: '#fff', background: canAfford ? `linear-gradient(135deg, ${c}, ${c}aa)` : 'rgba(255,255,255,0.07)', boxShadow: canAfford ? `0 4px 14px ${c}33` : 'none', opacity: buying ? 0.6 : 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+        {buying ? '…' : <>
+          <span>{svc.cta}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 800, opacity: 0.92 }}><Icon name="coins" size={11} color="#fff" />{svc.price.toLocaleString()}</span>
+        </>}
+      </motion.button>
+    </motion.div>
+  )
+}
+
 function ComingSoonCard({ color, delay }: { color: string; delay: number }) {
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay }}
@@ -129,6 +170,7 @@ export default function ShopPage() {
   const router = useRouter()
   const [items, setItems] = useState<ShopItem[]>(() => getCached<ShopItem[]>('shop') ?? [])
   const [buying, setBuying] = useState<number | null>(null)
+  const [svcBuying, setSvcBuying] = useState<string | null>(null)
   const { user, refreshUser } = useAuthStore()
 
   useEffect(() => {
@@ -141,6 +183,18 @@ export default function ShopPage() {
     try { await api.post(`/shop/${item.id}/buy`); await refreshUser(); alert(`${item.title} куплено!`) }
     catch (e: any) { alert(e?.response?.data?.message || 'Ошибка') }
     finally { setBuying(null) }
+  }
+
+  const buyService = async (svc: Service) => {
+    if (!user || user.coins < svc.price) { alert('Недостаточно монет'); return }
+    if (svc.confirm && !window.confirm(svc.confirm)) return
+    setSvcBuying(svc.key)
+    try {
+      const r = await api.post(svc.endpoint)
+      await refreshUser()
+      alert(r.data?.message || `${svc.title} — готово!`)
+    } catch (e: any) { alert(e?.response?.data?.message || 'Ошибка') }
+    finally { setSvcBuying(null) }
   }
 
   return (
@@ -170,6 +224,15 @@ export default function ShopPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <HeroTile tag="Киберспорт" title="CPL Qualifications" subtitle="Отбор в профессиональную CONDR Pro League" c1="#E8092E" c2="#F97316" icon="trophy" delay={0.05} onClick={() => router.push('/shop/cpl')} />
           <HeroTile tag="Подписка" title="CONDR Premium" subtitle="Больше отряд, особый статус и привилегии" price={2990} c1="#EAB308" c2="#F59E0B" icon="crown" delay={0.1} onClick={() => router.push('/shop/premium')} />
+        </div>
+
+        {/* Услуги */}
+        <SectionHeader label="Услуги" sub="Бусты, сбросы и полезные функции" color="#22C55E" icon="bolt" />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {SERVICES.map((svc, i) => (
+            <ServiceCard key={svc.key} svc={svc} delay={0.04 * i} buying={svcBuying === svc.key}
+              canAfford={(user?.coins ?? 0) >= svc.price} onBuy={() => buyService(svc)} />
+          ))}
         </div>
 
         {/* Sections */}

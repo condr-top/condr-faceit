@@ -48,7 +48,10 @@ export function MiniGameModal({ playsToday, onClose, onWin }: Props) {
   const { setHideNav } = useUiStore()
   useEffect(() => { setHideNav(true); return () => setHideNav(false) }, [])
 
-  const level = Math.min(playsToday, 9)
+  // Внутренний счётчик сыгранных партий: после победы растёт без закрытия модалки,
+  // чтобы можно было сразу играть следующий уровень вплоть до дневного лимита.
+  const [plays, setPlays] = useState(playsToday)
+  const level = Math.min(plays, 9)
   const P = getParams(level)
 
   const [phase, setPhase] = useState<Phase>(playsToday >= MAX_PLAYS ? 'limit' : 'ready')
@@ -161,7 +164,11 @@ export function MiniGameModal({ playsToday, onClose, onWin }: Props) {
     try {
       const res = await api.post('/users/mini-game/claim')
       await refreshUser()
-      onWin(res.data.coins, res.data.playsToday)
+      const newPlays = res.data.playsToday
+      onWin(res.data.coins, newPlays)
+      // Не выходим на главную: предлагаем сыграть следующий уровень, пока есть попытки.
+      setPlays(newPlays)
+      setPhase(newPlays >= MAX_PLAYS ? 'limit' : 'ready')
     } catch (e: any) {
       alert(e?.response?.data?.message || 'Ошибка')
     } finally { setClaiming(false) }
@@ -181,7 +188,7 @@ export function MiniGameModal({ playsToday, onClose, onWin }: Props) {
           <div style={{ fontSize: 15, fontWeight: 900, color: '#fff', display: 'flex', alignItems: 'center', gap: 7 }}>
             <Icon name="target" size={16} color="#E8092E" />Поймай точки
           </div>
-          <div style={{ fontSize: 10, color: '#4B5563', marginTop: 2 }}>Уровень {level + 1} · {playsToday}/{MAX_PLAYS} игр сегодня</div>
+          <div style={{ fontSize: 10, color: '#4B5563', marginTop: 2 }}>Уровень {level + 1} · {plays}/{MAX_PLAYS} игр сегодня</div>
         </div>
         {phase === 'playing' ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -274,7 +281,7 @@ export function MiniGameModal({ playsToday, onClose, onWin }: Props) {
             </div>
             <div style={{ display: 'flex', gap: 4, marginBottom: 24 }}>
               {Array.from({ length: MAX_PLAYS }).map((_, i) => (
-                <div key={i} style={{ width: 8, height: 8, borderRadius: '50%', background: i < playsToday ? '#374151' : i === playsToday ? '#22C55E' : 'rgba(255,255,255,0.08)', boxShadow: i === playsToday ? '0 0 6px rgba(34,197,94,0.6)' : 'none' }} />
+                <div key={i} style={{ width: 8, height: 8, borderRadius: '50%', background: i < plays ? '#374151' : i === plays ? '#22C55E' : 'rgba(255,255,255,0.08)', boxShadow: i === plays ? '0 0 6px rgba(34,197,94,0.6)' : 'none' }} />
               ))}
             </div>
             <motion.button whileTap={{ scale: 0.95 }} onClick={startGame}
@@ -338,7 +345,7 @@ export function MiniGameModal({ playsToday, onClose, onWin }: Props) {
               Поймано {score}/{P.target}. {score < P.target ? 'Лови точки быстрее и не тапай бомбы!' : ''}
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
-              {playsToday < MAX_PLAYS && (
+              {plays < MAX_PLAYS && (
                 <motion.button whileTap={{ scale: 0.96 }} onClick={startGame} style={{ padding: '12px 30px', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg, #22C55E, #16a34a)', color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>Ещё раз</motion.button>
               )}
               <motion.button whileTap={{ scale: 0.96 }} onClick={onClose} style={{ padding: '12px 26px', borderRadius: 12, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', color: '#6B7280', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>Закрыть</motion.button>

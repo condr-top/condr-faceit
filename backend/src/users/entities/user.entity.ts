@@ -92,6 +92,14 @@ export class User {
   @Column({ name: 'premium_until', nullable: true, type: 'timestamp' })
   premiumUntil: Date;
 
+  // Boost 2X к начислению CONDR COIN (не на донат) — действует до этой даты
+  @Column({ name: 'coin_boost_until', nullable: true, type: 'timestamp' })
+  coinBoostUntil: Date;
+
+  // Игрок купил внутриигровой тэг [CONDR] — ждёт ручной выдачи администратором
+  @Column({ name: 'condr_tag_requested', default: false })
+  condrTagRequested: boolean;
+
   @Column({ name: 'game_nickname', nullable: true })
   gameNickname: string;
 

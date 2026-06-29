@@ -7,6 +7,7 @@ import { Friendship, FriendshipStatus } from '../users/entities/friendship.entit
 import { Notification } from '../notifications/entities/notification.entity';
 import { AppGateway } from '../gateway/app.gateway';
 import { MatchesService } from '../matches/matches.service';
+import { TelegramNotifyService } from '../notifications/telegram-notify.service';
 
 interface Party {
   id: string;
@@ -31,6 +32,7 @@ export class PartyService {
     @InjectRepository(Notification) private notifRepo: Repository<Notification>,
     private gateway: AppGateway,
     private matchesService: MatchesService,
+    private tgNotify: TelegramNotifyService,
   ) {}
 
   // ── helpers ────────────────────────────────────────────────────────────────
@@ -143,6 +145,9 @@ export class PartyService {
       body: `${leader?.gameNickname || leader?.firstName || 'Игрок'} зовёт вас в отряд`,
       meta: { partyId: party.id, fromId: leaderId },
     })).catch(() => {});
+    this.tgNotify.push(friendId, 'party_invite',
+      `🤝 <b>${leader?.gameNickname || leader?.firstName || 'Игрок'}</b> зовёт тебя в отряд.`,
+      { text: '👥 Открыть CONDR', webApp: true, path: '/dashboard' });
 
     this.ping(party);
     return this.getState(leaderId);

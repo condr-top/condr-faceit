@@ -10,6 +10,7 @@ import { EloHistory } from './entities/elo-history.entity';
 import { withCoinBoost } from '../common/coin-boost';
 import { AppGateway } from '../gateway/app.gateway';
 import { InviteService } from '../invite/invite.service';
+import { TelegramNotifyService } from '../notifications/telegram-notify.service';
 
 @Injectable()
 export class UsersService {
@@ -21,6 +22,7 @@ export class UsersService {
     @InjectRepository(EloHistory) private eloHistoryRepo: Repository<EloHistory>,
     private gateway: AppGateway,
     private inviteService: InviteService,
+    private tgNotify: TelegramNotifyService,
   ) {}
 
   /** Шаг 1 регистрации: ввод пригласительного кода. Списывает код (один код = один человек). */
@@ -204,7 +206,20 @@ export class UsersService {
       ],
     });
     if (existing) throw new BadRequestException('Request already exists');
-    return this.friendshipRepo.save(this.friendshipRepo.create({ userId, friendId: targetId }));
+    const saved = await this.friendshipRepo.save(this.friendshipRepo.create({ userId, friendId: targetId }));
+    const from = await this.userRepo.findOne({ where: { id: userId } });
+    this.tgNotify.push(targetId, 'friend_request',
+      `👤 <b>${from?.gameNickname || from?.firstName || 'Игрок'}</b> добавил тебя в друзья.`,
+      { text: '👤 Открыть CONDR', webApp: true, path: '/friends' });
+    return saved;
+  }
+
+  /** Настройки Telegram-уведомлений: какие типы слать игроку. */
+  async updateNotifPrefs(userId: number, prefs: Record<string, boolean>): Promise<{ ok: true; notifPrefs: Record<string, boolean> }> {
+    const user = await this.findById(userId);
+    user.notifPrefs = { ...(user.notifPrefs || {}), ...(prefs || {}) };
+    await this.userRepo.save(user);
+    return { ok: true, notifPrefs: user.notifPrefs };
   }
 
   async acceptFriendRequest(userId: number, fromId: number): Promise<Friendship> {
@@ -295,6 +310,7 @@ export class UsersService {
       displayName: user.displayName,
       elo: user.elo,
       coins: user.coins,
+      notifPrefs: user.notifPrefs || {},
       matchesPlayed: user.matchesPlayed,
       matchesWon: user.matchesWon,
       matchesLost: user.matchesLost,

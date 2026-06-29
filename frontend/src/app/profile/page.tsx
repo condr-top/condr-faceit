@@ -17,6 +17,7 @@ import { getEloRank, getRankProgress, ELO_RANKS, CHALLENGER_RANK, qualifiesChall
 import { Flag } from '@/components/ui/Flag'
 import { RegionPicker } from '@/components/ui/RegionPicker'
 import { StreamerSettings } from '@/components/streamer/StreamerSettings'
+import { NotifSettings } from '@/components/settings/NotifSettings'
 import { Icon, IconName } from '@/components/ui/Icon'
 import { useUiStore } from '@/store/uiStore'
 
@@ -839,6 +840,9 @@ export default function ProfilePage() {
               </div>
             </motion.div>
           )}
+
+          {/* ── УВЕДОМЛЕНИЯ В TELEGRAM ── */}
+          <NotifSettings />
 
           {/* ── ДЛЯ СТРИМЕРОВ (OBS-виджет) ── */}
           <StreamerSettings />

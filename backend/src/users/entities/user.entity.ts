@@ -105,6 +105,10 @@ export class User {
   @Column({ name: 'stream_token', nullable: true })
   streamToken: string;
 
+  // Какие уведомления слать в Telegram-бот: { [type]: boolean }. Отсутствие ключа = включено.
+  @Column({ name: 'notif_prefs', type: 'jsonb', default: {} })
+  notifPrefs: Record<string, boolean>;
+
   @Column({ name: 'game_nickname', nullable: true })
   gameNickname: string;
 

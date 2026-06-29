@@ -7,12 +7,14 @@ import { Friendship } from '../users/entities/friendship.entity';
 import { Notification } from '../notifications/entities/notification.entity';
 import { GatewayModule } from '../gateway/gateway.module';
 import { MatchesModule } from '../matches/matches.module';
+import { TelegramNotifyModule } from '../notifications/telegram-notify.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([User, Friendship, Notification]),
     GatewayModule,
     MatchesModule,
+    TelegramNotifyModule,
   ],
   controllers: [PartyController],
   providers: [PartyService],

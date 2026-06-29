@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter } from 'next/navigation'
+import { useSheetDrag } from '@/lib/useSheetDrag'
 import { api } from '@/lib/api'
 import { getCached, setCached } from '@/lib/cache'
 import { useAuthStore } from '@/store/authStore'
@@ -30,15 +31,26 @@ const SECTIONS: { key: string; label: string; sub: string; color: string; icon: 
 
 // Услуги — вызывают отдельные эндпоинты бэка (цены — на сервере, здесь только витрина).
 interface Service {
-  key: string; title: string; desc: string; price: number; color: string; icon: IconName
+  key: string; title: string; short: string; desc: string; price: number; color: string; icon: IconName
   endpoint: string; cta: string; confirm?: string; danger?: boolean
+  bullets: string[]
 }
 const SERVICES: Service[] = [
-  { key: 'coin_boost', title: 'Boost 2X', desc: 'Удвоение начисления CONDR COIN на 24 часа. Не распространяется на донат.', price: 1500, color: '#EAB308', icon: 'bolt', endpoint: '/shop/service/boost', cta: 'Активировать' },
-  { key: 'warn_remove', title: 'Снятие варна', desc: 'Убирает одно активное предупреждение с аккаунта.', price: 1500, color: '#22C55E', icon: 'shield', endpoint: '/shop/service/warn-remove', cta: 'Снять варн' },
-  { key: 'condr_tag', title: 'Тэг [CONDR]', desc: 'Внутриигровой тэг [CONDR]. Выдаст администратор прямо в игре.', price: 5000, color: '#A855F7', icon: 'sparkles', endpoint: '/shop/service/condr-tag', cta: 'Заказать', confirm: 'Заказать внутриигровой тэг [CONDR]? Администратор выдаст его в самой игре.' },
-  { key: 'kd_reset', title: 'Обнуление K/D', desc: 'Сброс статистики и истории матчей обычной лиги. ELO и ранг остаются.', price: 2500, color: '#F97316', icon: 'target', endpoint: '/shop/service/kd-reset', cta: 'Обнулить', danger: true, confirm: 'Обнулить K/D? Статистика и история матчей обычной лиги будут стёрты безвозвратно. ELO останется.' },
-  { key: 'clean_slate', title: 'Чистый лист', desc: 'Полный сброс: история матчей стёрта, ELO сброшен, повторная калибровка.', price: 4000, color: '#E8092E', icon: 'refresh', endpoint: '/shop/service/clean-slate', cta: 'Сбросить', danger: true, confirm: 'Начать с чистого листа? Вся история матчей будет стёрта, ELO сброшен до старта, потребуется повторная калибровка. Действие необратимо.' },
+  { key: 'coin_boost', title: 'Boost 2X', short: '×2 коина · 24ч', price: 1500, color: '#EAB308', icon: 'bolt', endpoint: '/shop/service/boost', cta: 'Активировать',
+    desc: 'Удваивает начисление CONDR COIN на 24 часа.',
+    bullets: ['×2 к коинам за матчи, миссии, ачивки и мини-игру', 'Действует 24 часа с момента покупки', 'Не распространяется на донат (пополнение)', 'Покупка во время активного буста продлевает срок'] },
+  { key: 'warn_remove', title: 'Снятие варна', short: '−1 предупреждение', price: 1500, color: '#22C55E', icon: 'shield', endpoint: '/shop/service/warn-remove', cta: 'Снять варн',
+    desc: 'Убирает одно активное предупреждение с аккаунта.',
+    bullets: ['Снимает одно предупреждение', 'Если бан был выдан за 3 варна — аккаунт авто-разбанится', 'Без активных варнов покупка недоступна'] },
+  { key: 'condr_tag', title: 'Тэг [CONDR]', short: 'Игровой тэг', price: 5000, color: '#A855F7', icon: 'sparkles', endpoint: '/shop/service/condr-tag', cta: 'Заказать', confirm: 'Заказать внутриигровой тэг [CONDR]? Администратор выдаст его в самой игре.',
+    desc: 'Внутриигровой тэг [CONDR] рядом с ником.',
+    bullets: ['Заявка уходит администраторам', 'Тэг выдаётся вручную прямо в игре Standoff 2', 'Одна активная заявка на аккаунт'] },
+  { key: 'kd_reset', title: 'Обнуление K/D', short: 'Сброс статы', price: 2500, color: '#F97316', icon: 'target', endpoint: '/shop/service/kd-reset', cta: 'Обнулить', danger: true, confirm: 'Обнулить K/D? Статистика и история матчей обычной лиги будут стёрты безвозвратно. ELO останется.',
+    desc: 'Сброс статистики и истории матчей обычной лиги.',
+    bullets: ['Обнуляет K/D, rating, победы/поражения', 'Стирает историю матчей обычной лиги', 'ELO и ранг остаются на месте', 'Действие необратимо'] },
+  { key: 'clean_slate', title: 'Чистый лист', short: 'Полный сброс', price: 4000, color: '#E8092E', icon: 'refresh', endpoint: '/shop/service/clean-slate', cta: 'Сбросить', danger: true, confirm: 'Начать с чистого листа? Вся история матчей будет стёрта, ELO сброшен до старта, потребуется повторная калибровка. Действие необратимо.',
+    desc: 'Полный сброс профиля обычной лиги с калибровкой заново.',
+    bullets: ['Всё из «Обнуления K/D»', 'ELO сбрасывается до стартового (1000)', 'Первые 10 матчей снова калибровочные', 'Действие необратимо'] },
 ]
 
 // ── Big horizontal hero tile ────────────────────────────────────────────────────
@@ -110,31 +122,86 @@ function ItemCard({ item, delay, onBuy, buying, canAfford }: { item: ShopItem; d
   )
 }
 
-// ── Service card (полноширинная карточка услуги) ──────────────────────────────────
-function ServiceCard({ svc, delay, onBuy, buying, canAfford }: { svc: Service; delay: number; onBuy: () => void; buying: boolean; canAfford: boolean }) {
+// ── Service tile (квадратная плитка услуги — тап открывает детали) ────────────────
+function ServiceTile({ svc, delay, onOpen }: { svc: Service; delay: number; onOpen: () => void }) {
   const c = svc.color
   return (
-    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay, type: 'spring', stiffness: 300, damping: 24 }}
-      style={{ borderRadius: 16, padding: 14, background: `radial-gradient(120% 120% at 0% 0%, ${c}14, transparent 55%), #0f0f15`, border: `1px solid ${c}2e`, position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', gap: 13 }}>
-      <div style={{ position: 'absolute', top: 0, left: '12%', right: '12%', height: 1, background: `linear-gradient(90deg, transparent, ${c}88, transparent)` }} />
-      <div style={{ position: 'absolute', right: -10, top: '50%', transform: 'translateY(-50%)', opacity: 0.07, pointerEvents: 'none' }}><Icon name={svc.icon} size={92} color={c} /></div>
-      <div style={{ width: 46, height: 46, borderRadius: 13, flexShrink: 0, background: `${c}18`, border: `1px solid ${c}40`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Icon name={svc.icon} size={24} color={c} />
-      </div>
-      <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          <span style={{ fontSize: 14.5, fontWeight: 900, color: '#fff' }}>{svc.title}</span>
-          {svc.danger && <span style={{ fontSize: 8.5, fontWeight: 900, color: '#F87171', background: 'rgba(239,68,68,0.14)', border: '1px solid rgba(239,68,68,0.3)', padding: '2px 6px', borderRadius: 5, letterSpacing: '0.04em' }}>СБРОС</span>}
+    <motion.button
+      initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay, type: 'spring', stiffness: 300, damping: 24 }}
+      whileTap={{ scale: 0.97 }} onClick={onOpen}
+      style={{
+        position: 'relative', textAlign: 'left', cursor: 'pointer', width: '100%', aspectRatio: '1 / 1',
+        borderRadius: 18, padding: 14, overflow: 'hidden', display: 'flex', flexDirection: 'column',
+        background: `radial-gradient(130% 130% at 0% 0%, ${c}1f, transparent 55%), linear-gradient(160deg, #0e0e14, #08080b)`,
+        border: `1px solid ${c}33`, boxShadow: `0 10px 30px ${c}14`,
+      }}>
+      <div style={{ position: 'absolute', top: 0, left: '14%', right: '14%', height: 1, background: `linear-gradient(90deg, transparent, ${c}99, transparent)` }} />
+      <div style={{ position: 'absolute', right: -16, bottom: -16, opacity: 0.08, pointerEvents: 'none' }}><Icon name={svc.icon} size={104} color={c} /></div>
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ width: 46, height: 46, borderRadius: 13, background: `${c}1a`, border: `1px solid ${c}40`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Icon name={svc.icon} size={24} color={c} />
         </div>
-        <div style={{ fontSize: 11, color: '#7C8493', marginTop: 3, lineHeight: 1.42 }}>{svc.desc}</div>
+        {svc.danger && <span style={{ fontSize: 8.5, fontWeight: 900, color: '#F87171', background: 'rgba(239,68,68,0.14)', border: '1px solid rgba(239,68,68,0.3)', padding: '2px 6px', borderRadius: 5, letterSpacing: '0.04em' }}>СБРОС</span>}
       </div>
-      <motion.button whileTap={{ scale: 0.95 }} onClick={onBuy} disabled={buying}
-        style={{ flexShrink: 0, alignSelf: 'stretch', minWidth: 92, padding: '0 12px', borderRadius: 12, border: 'none', cursor: buying ? 'default' : 'pointer', fontSize: 13, fontWeight: 900, color: '#fff', background: canAfford ? `linear-gradient(135deg, ${c}, ${c}aa)` : 'rgba(255,255,255,0.07)', boxShadow: canAfford ? `0 4px 14px ${c}33` : 'none', opacity: buying ? 0.6 : 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
-        {buying ? '…' : <>
-          <span>{svc.cta}</span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 800, opacity: 0.92 }}><Icon name="coins" size={11} color="#fff" />{svc.price.toLocaleString()}</span>
-        </>}
-      </motion.button>
+
+      <div style={{ marginTop: 'auto', position: 'relative' }}>
+        <div style={{ fontSize: 15.5, fontWeight: 900, color: '#fff', letterSpacing: '-0.01em' }}>{svc.title}</div>
+        <div style={{ fontSize: 10.5, color: '#7C8493', marginTop: 2 }}>{svc.short}</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 9px', borderRadius: 9, background: `${c}1a`, border: `1px solid ${c}3a` }}>
+            <Icon name="coins" size={12} color={c} /><span style={{ fontSize: 12.5, fontWeight: 900, color: '#fff' }}>{svc.price.toLocaleString()}</span>
+          </span>
+          <Icon name="chevronRight" size={16} color={c} />
+        </div>
+      </div>
+    </motion.button>
+  )
+}
+
+// ── Service detail bottom sheet ───────────────────────────────────────────────────
+function ServiceDetailSheet({ svc, onClose, onBuy, buying, canAfford }: { svc: Service; onClose: () => void; onBuy: () => void; buying: boolean; canAfford: boolean }) {
+  const c = svc.color
+  const sheet = useSheetDrag(onClose)
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}
+      style={{ position: 'fixed', inset: 0, zIndex: 120, background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      <motion.div {...sheet.panelProps} initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 30, stiffness: 300 }} onClick={(e) => e.stopPropagation()}
+        style={{ width: '100%', maxWidth: 520, background: `radial-gradient(120% 80% at 50% 0%, ${c}1a, transparent 60%), linear-gradient(180deg, #101016, #0a0a0f)`, borderRadius: '26px 26px 0 0', border: '1px solid rgba(255,255,255,0.09)', borderBottom: 'none', padding: 20, paddingBottom: 28, maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 -20px 60px rgba(0,0,0,0.5)' }}>
+        <div {...sheet.handleProps} style={{ ...sheet.handleProps.style, padding: '4px 0 16px' }}>
+          <div style={{ width: 42, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.2)' }} />
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+          <div style={{ width: 58, height: 58, borderRadius: 16, flexShrink: 0, background: `${c}1c`, border: `1px solid ${c}45`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 24px ${c}33` }}>
+            <Icon name={svc.icon} size={30} color={c} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 20, fontWeight: 900, color: '#fff' }}>{svc.title}</span>
+              {svc.danger && <span style={{ fontSize: 9, fontWeight: 900, color: '#F87171', background: 'rgba(239,68,68,0.14)', border: '1px solid rgba(239,68,68,0.3)', padding: '2px 7px', borderRadius: 6 }}>НЕОБРАТИМО</span>}
+            </div>
+            <div style={{ fontSize: 12.5, color: '#9CA3AF', marginTop: 3, lineHeight: 1.4 }}>{svc.desc}</div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 20 }}>
+          {svc.bullets.map((b, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
+              <span style={{ marginTop: 2, flexShrink: 0, width: 18, height: 18, borderRadius: 6, background: `${c}1f`, border: `1px solid ${c}40`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name="check" size={11} color={c} />
+              </span>
+              <span style={{ fontSize: 13, color: '#D1D5DB', lineHeight: 1.45 }}>{b}</span>
+            </div>
+          ))}
+        </div>
+
+        <motion.button whileTap={{ scale: 0.97 }} onClick={onBuy} disabled={buying}
+          style={{ width: '100%', padding: '15px 0', borderRadius: 15, border: 'none', cursor: buying ? 'default' : 'pointer', fontSize: 15, fontWeight: 900, color: '#fff', background: canAfford ? `linear-gradient(135deg, ${c}, ${c}bb)` : 'rgba(255,255,255,0.07)', boxShadow: canAfford ? `0 6px 24px ${c}3a` : 'none', opacity: buying ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          {buying ? '…' : <>{svc.cta} · <Icon name="coins" size={16} color="#fff" /> {svc.price.toLocaleString()}</>}
+        </motion.button>
+        {!canAfford && <div style={{ textAlign: 'center', fontSize: 11.5, color: '#F87171', marginTop: 10 }}>Недостаточно монет</div>}
+      </motion.div>
     </motion.div>
   )
 }
@@ -171,6 +238,7 @@ export default function ShopPage() {
   const [items, setItems] = useState<ShopItem[]>(() => getCached<ShopItem[]>('shop') ?? [])
   const [buying, setBuying] = useState<number | null>(null)
   const [svcBuying, setSvcBuying] = useState<string | null>(null)
+  const [svcDetail, setSvcDetail] = useState<Service | null>(null)
   const { user, refreshUser } = useAuthStore()
 
   useEffect(() => {
@@ -192,6 +260,7 @@ export default function ShopPage() {
     try {
       const r = await api.post(svc.endpoint)
       await refreshUser()
+      setSvcDetail(null)
       alert(r.data?.message || `${svc.title} — готово!`)
     } catch (e: any) { alert(e?.response?.data?.message || 'Ошибка') }
     finally { setSvcBuying(null) }
@@ -226,12 +295,11 @@ export default function ShopPage() {
           <HeroTile tag="Подписка" title="CONDR Premium" subtitle="Больше отряд, особый статус и привилегии" price={2990} c1="#EAB308" c2="#F59E0B" icon="crown" delay={0.1} onClick={() => router.push('/shop/premium')} />
         </div>
 
-        {/* Услуги */}
+        {/* Услуги — квадратные плитки, по 2 в ряд, детали по тапу */}
         <SectionHeader label="Услуги" sub="Бусты, сбросы и полезные функции" color="#22C55E" icon="bolt" />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           {SERVICES.map((svc, i) => (
-            <ServiceCard key={svc.key} svc={svc} delay={0.04 * i} buying={svcBuying === svc.key}
-              canAfford={(user?.coins ?? 0) >= svc.price} onBuy={() => buyService(svc)} />
+            <ServiceTile key={svc.key} svc={svc} delay={0.04 * i} onOpen={() => setSvcDetail(svc)} />
           ))}
         </div>
 
@@ -253,6 +321,18 @@ export default function ShopPage() {
           )
         })}
       </div>
+
+      <AnimatePresence>
+        {svcDetail && (
+          <ServiceDetailSheet
+            svc={svcDetail}
+            onClose={() => setSvcDetail(null)}
+            onBuy={() => buyService(svcDetail)}
+            buying={svcBuying === svcDetail.key}
+            canAfford={(user?.coins ?? 0) >= svcDetail.price}
+          />
+        )}
+      </AnimatePresence>
     </RequireRegistration>
   )
 }

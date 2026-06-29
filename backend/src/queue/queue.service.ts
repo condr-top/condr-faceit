@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import Redis from 'ioredis';
 import { MatchesService } from '../matches/matches.service';
 import { AppGateway } from '../gateway/app.gateway';
+import { TelegramNotifyService } from '../notifications/telegram-notify.service';
 
 export interface QueueEntry {
   userId: number;
@@ -19,6 +20,7 @@ export class QueueService {
   constructor(
     private matchesService: MatchesService,
     private gateway: AppGateway,
+    private tgNotify: TelegramNotifyService,
   ) {
     this.redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
   }
@@ -69,6 +71,11 @@ export class QueueService {
       const size = await this.getQueueSize();
       this.gateway.emitQueueUpdate(size);
       this.gateway.emitMatchFound(group.map((e) => e.userId), match.id);
+      for (const e of group) {
+        this.tgNotify.push(e.userId, 'match_found',
+          '🎮 <b>Игра найдена!</b>\nЗаходи в лобби и подтверди готовность.',
+          { text: '⚔️ Открыть матч', webApp: true, path: `/match/${match.id}` });
+      }
     } catch {
       for (const entry of group) {
         await this.redis.hset(this.QUEUE_KEY, String(entry.userId), JSON.stringify(entry));

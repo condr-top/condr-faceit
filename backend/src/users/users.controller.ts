@@ -36,6 +36,11 @@ export class UsersController {
     return this.usersService.updatePrivacy(req.user.id, hideUsername);
   }
 
+  @Post('notif-prefs')
+  updateNotifPrefs(@Request() req: any, @Body('prefs') prefs: Record<string, boolean>) {
+    return this.usersService.updateNotifPrefs(req.user.id, prefs);
+  }
+
   @Post('discord')
   setDiscord(@Request() req: any, @Body('discordUsername') name: string) {
     return this.usersService.setDiscordUsername(req.user.id, name ?? null);

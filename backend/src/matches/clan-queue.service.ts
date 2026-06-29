@@ -7,6 +7,7 @@ import { MatchesService } from './matches.service';
 import { ClansService } from '../clans/clans.service';
 import { ClanMatch } from '../clans/entities/clan-match.entity';
 import { AppGateway } from '../gateway/app.gateway';
+import { TelegramNotifyService } from '../notifications/telegram-notify.service';
 
 interface ClanQueueEntry {
   clanId: number;
@@ -26,6 +27,7 @@ export class ClanQueueService {
     private clansService: ClansService,
     @InjectRepository(ClanMatch) private clanMatchRepo: Repository<ClanMatch>,
     private gateway: AppGateway,
+    private tgNotify: TelegramNotifyService,
   ) {
     this.redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
   }
@@ -86,7 +88,10 @@ export class ClanQueueService {
       scrim.matchId = match.id;
       await this.clanMatchRepo.save(scrim);
       await this.redis.del(this.pracKey(scrimId, 'A'), this.pracKey(scrimId, 'B'));
-      for (const uid of [...rosterA, ...rosterB]) this.gateway.emitToUser(uid, 'match_found', { matchId: match.id });
+      for (const uid of [...rosterA, ...rosterB]) {
+        this.gateway.emitToUser(uid, 'match_found', { matchId: match.id });
+        this.tgNotify.push(uid, 'match_found', '🎮 <b>Клановый матч найден!</b>\nЗаходи в лобби.', { text: '⚔️ Открыть матч', webApp: true, path: `/match/${match.id}` });
+      }
       return { started: true, matchId: match.id };
     }
     return { started: false, readyA: aMembers.length, readyB: bMembers.length };
@@ -166,7 +171,10 @@ export class ClanQueueService {
         { clanId: b.clanId, roster: b.roster, captainId: b.captainId },
       );
       const allPlayers = [...a.roster, ...b.roster];
-      for (const uid of allPlayers) this.gateway.emitToUser(uid, 'match_found', { matchId: match.id });
+      for (const uid of allPlayers) {
+        this.gateway.emitToUser(uid, 'match_found', { matchId: match.id });
+        this.tgNotify.push(uid, 'match_found', '🎮 <b>Клановый матч найден!</b>\nЗаходи в лобби.', { text: '⚔️ Открыть матч', webApp: true, path: `/match/${match.id}` });
+      }
       this.gateway.emitToClan(a.clanId, 'clan_update', { reason: 'match_found', matchId: match.id });
       this.gateway.emitToClan(b.clanId, 'clan_update', { reason: 'match_found', matchId: match.id });
     } catch {

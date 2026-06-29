@@ -10,9 +10,10 @@ import { Match } from '../matches/entities/match.entity';
 import { EloHistory } from './entities/elo-history.entity';
 import { GatewayModule } from '../gateway/gateway.module';
 import { InviteModule } from '../invite/invite.module';
+import { TelegramNotifyModule } from '../notifications/telegram-notify.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([User, Friendship, MatchPlayer, Match, EloHistory]), GatewayModule, InviteModule],
+  imports: [TypeOrmModule.forFeature([User, Friendship, MatchPlayer, Match, EloHistory]), GatewayModule, InviteModule, TelegramNotifyModule],
   controllers: [UsersController, ObsController],
   providers: [UsersService],
   exports: [UsersService],

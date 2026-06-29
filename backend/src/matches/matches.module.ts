@@ -12,9 +12,10 @@ import { GatewayModule } from '../gateway/gateway.module';
 import { DiscordModule } from '../discord/discord.module';
 import { ClansModule } from '../clans/clans.module';
 import { ClanQueueService } from './clan-queue.service';
+import { TelegramNotifyModule } from '../notifications/telegram-notify.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Match, MatchPlayer, MatchMessage, User, Notification, ClanMatch]), GatewayModule, DiscordModule, ClansModule],
+  imports: [TypeOrmModule.forFeature([Match, MatchPlayer, MatchMessage, User, Notification, ClanMatch]), GatewayModule, DiscordModule, ClansModule, TelegramNotifyModule],
   controllers: [MatchesController],
   providers: [MatchesService, ClanQueueService],
   exports: [MatchesService, ClanQueueService],

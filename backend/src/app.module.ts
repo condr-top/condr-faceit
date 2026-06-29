@@ -32,6 +32,7 @@ import { Report } from './reports/entities/report.entity';
 import { User } from './users/entities/user.entity';
 import { Match } from './matches/entities/match.entity';
 import { MatchPlayer } from './matches/entities/match-player.entity';
+import { MatchMessage } from './matches/entities/match-message.entity';
 import { Mission } from './missions/entities/mission.entity';
 import { UserMission } from './missions/entities/user-mission.entity';
 import { Achievement } from './achievements/entities/achievement.entity';
@@ -70,6 +71,7 @@ import { InviteCode } from './invite/entities/invite-code.entity';
           User,
           Match,
           MatchPlayer,
+          MatchMessage,
           Mission,
           UserMission,
           Achievement,

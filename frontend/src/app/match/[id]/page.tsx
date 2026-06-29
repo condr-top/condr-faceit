@@ -14,6 +14,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { getEloRank } from '@/lib/eloRank'
 import { EloRing } from '@/components/ui/EloRing'
 import { ReportModal } from '@/components/reports/ReportModal'
+import { MatchChat } from '@/components/match/MatchChat'
 
 // Module-scope map image helper (для компонентов вне основного)
 const mapImgUrl = (name: string) => `/maps/${name.charAt(0).toUpperCase()}${name.slice(1).toLowerCase()}.webp`
@@ -1507,6 +1508,14 @@ export default function MatchPage() {
             </motion.div>
           )
         })()}
+
+        {/* Чат матча — общий для обеих команд (кроме экрана поиска) */}
+        {currentMatch.status !== 'ready_check' &&
+          (currentMatch.teamAIds?.includes(user.id) || currentMatch.teamBIds?.includes(user.id)) && (
+          <div style={{ marginTop: 16 }}>
+            <MatchChat matchId={Number(id)} userId={user.id} />
+          </div>
+        )}
       </div>
     </div>
   )

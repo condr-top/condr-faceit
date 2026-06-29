@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Or, In } from 'typeorm';
+import { randomBytes } from 'crypto';
 import { User } from './entities/user.entity';
 import { Friendship, FriendshipStatus } from './entities/friendship.entity';
 import { MatchPlayer } from '../matches/entities/match-player.entity';
@@ -44,6 +45,54 @@ export class UsersService {
     await this.eloHistoryRepo.save(
       this.eloHistoryRepo.create({ userId, eloBefore, eloAfter, eloChange: change, reason }),
     );
+  }
+
+  // ── OBS-виджет для стримеров ────────────────────────────────────────────────
+  private genStreamToken(): string {
+    return randomBytes(9).toString('base64url'); // ~12 url-safe символов
+  }
+
+  async getStreamToken(userId: number): Promise<{ token: string }> {
+    const user = await this.findById(userId);
+    if (!user.streamToken) {
+      user.streamToken = this.genStreamToken();
+      await this.userRepo.save(user);
+    }
+    return { token: user.streamToken };
+  }
+
+  async regenerateStreamToken(userId: number): Promise<{ token: string }> {
+    const user = await this.findById(userId);
+    user.streamToken = this.genStreamToken();
+    await this.userRepo.save(user);
+    return { token: user.streamToken };
+  }
+
+  /** Публичные данные для OBS-виджета по токену (без авторизации). */
+  async getObsStats(token: string) {
+    if (!token) throw new NotFoundException('Виджет не найден');
+    const user = await this.userRepo.findOne({ where: { streamToken: token } });
+    if (!user) throw new NotFoundException('Виджет не найден');
+
+    // Форма по последним 5 матчам: знак изменения ELO (W/L/D)
+    const recent = await this.playerRepo.find({ where: { userId: user.id }, order: { id: 'DESC' }, take: 5 });
+    const form = recent
+      .map((p) => (p.eloChange > 0 ? 'W' : p.eloChange < 0 ? 'L' : 'D'))
+      .reverse(); // в хронологическом порядке (слева — старее)
+
+    return {
+      nickname: user.gameNickname || user.firstName || 'Игрок',
+      avatarUrl: user.avatarUrl || null,
+      isVerified: !!user.isVerified,
+      elo: user.elo,
+      rating: user.ratingOverall,
+      kd: user.kdr,
+      matchesPlayed: user.matchesPlayed,
+      calibrating: user.matchesPlayed < 10,
+      calibrationPlayed: Math.min(user.matchesPlayed, 10),
+      calibrationTotal: 10,
+      form,
+    };
   }
 
   async findById(id: number): Promise<User> {

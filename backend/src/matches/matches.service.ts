@@ -8,6 +8,7 @@ import FormData from 'form-data';
 import { tgPost } from '../common/telegram';
 import { Match, MatchStatus, MAPS } from './entities/match.entity';
 import { MatchPlayer } from './entities/match-player.entity';
+import { MatchMessage } from './entities/match-message.entity';
 import { User } from '../users/entities/user.entity';
 import { Notification } from '../notifications/entities/notification.entity';
 import { AppGateway } from '../gateway/app.gateway';
@@ -21,6 +22,7 @@ export class MatchesService {
   constructor(
     @InjectRepository(Match) private matchRepo: Repository<Match>,
     @InjectRepository(MatchPlayer) private playerRepo: Repository<MatchPlayer>,
+    @InjectRepository(MatchMessage) private msgRepo: Repository<MatchMessage>,
     @InjectRepository(User) private userRepo: Repository<User>,
     @InjectRepository(Notification) private notifRepo: Repository<Notification>,
     private gateway: AppGateway,
@@ -1450,5 +1452,39 @@ export class MatchesService {
       teamA,
       teamB,
     };
+  }
+
+  // ── Чат матча (обе команды) ────────────────────────────────────────────────
+  private participantTeam(match: Match, userId: number): 'A' | 'B' | null {
+    if ((match.teamAIds || []).includes(userId)) return 'A';
+    if ((match.teamBIds || []).includes(userId)) return 'B';
+    return null;
+  }
+
+  async getMatchMessages(matchId: number, userId: number) {
+    const match = await this.matchRepo.findOne({ where: { id: matchId } });
+    if (!match) throw new NotFoundException('Матч не найден');
+    if (!this.participantTeam(match, userId)) throw new BadRequestException('Вы не участник этого матча');
+    return this.msgRepo.find({ where: { matchId }, order: { id: 'ASC' }, take: 300 });
+  }
+
+  async sendMatchMessage(matchId: number, userId: number, text: string) {
+    const clean = (text || '').trim().slice(0, 500);
+    if (!clean) throw new BadRequestException('Пустое сообщение');
+    const match = await this.matchRepo.findOne({ where: { id: matchId } });
+    if (!match) throw new NotFoundException('Матч не найден');
+    const team = this.participantTeam(match, userId);
+    if (!team) throw new BadRequestException('Вы не участник этого матча');
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    const msg = await this.msgRepo.save(this.msgRepo.create({
+      matchId,
+      userId,
+      team,
+      nickname: user?.gameNickname || user?.firstName || 'Игрок',
+      avatarUrl: user?.avatarUrl || null,
+      text: clean,
+    }));
+    this.gateway.emitToMatch(matchId, 'match_message', msg);
+    return msg;
   }
 }

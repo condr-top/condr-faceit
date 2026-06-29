@@ -21,6 +21,16 @@ export class UsersController {
     return this.usersService.claimMiniGameReward(req.user.id);
   }
 
+  @Get('stream-token')
+  getStreamToken(@Request() req: any) {
+    return this.usersService.getStreamToken(req.user.id);
+  }
+
+  @Post('stream-token/regenerate')
+  regenerateStreamToken(@Request() req: any) {
+    return this.usersService.regenerateStreamToken(req.user.id);
+  }
+
   @Post('privacy')
   updatePrivacy(@Request() req: any, @Body('hideUsername') hideUsername: boolean) {
     return this.usersService.updatePrivacy(req.user.id, hideUsername);

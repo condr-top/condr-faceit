@@ -131,6 +131,16 @@ export class MatchesController {
     return this.matchesService.getMatchSummary(id);
   }
 
+  @Get(':id/messages')
+  getMatchMessages(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.matchesService.getMatchMessages(id, req.user.id);
+  }
+
+  @Post(':id/messages')
+  sendMatchMessage(@Param('id', ParseIntPipe) id: number, @Body('text') text: string, @Request() req: any) {
+    return this.matchesService.sendMatchMessage(id, req.user.id, text);
+  }
+
   @Get(':id')
   getMatch(@Param('id', ParseIntPipe) id: number) {
     return this.matchesService.fetchMatchForClient(id);

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UsersController } from './users.controller';
+import { ObsController } from './obs.controller';
 import { UsersService } from './users.service';
 import { User } from './entities/user.entity';
 import { Friendship } from './entities/friendship.entity';
@@ -12,7 +13,7 @@ import { InviteModule } from '../invite/invite.module';
 
 @Module({
   imports: [TypeOrmModule.forFeature([User, Friendship, MatchPlayer, Match, EloHistory]), GatewayModule, InviteModule],
-  controllers: [UsersController],
+  controllers: [UsersController, ObsController],
   providers: [UsersService],
   exports: [UsersService],
 })

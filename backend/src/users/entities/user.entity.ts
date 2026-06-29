@@ -100,6 +100,11 @@ export class User {
   @Column({ name: 'condr_tag_requested', default: false })
   condrTagRequested: boolean;
 
+  // Токен публичного OBS-виджета для стримеров (ссылка вида /obs/<token>)
+  @Index()
+  @Column({ name: 'stream_token', nullable: true })
+  streamToken: string;
+
   @Column({ name: 'game_nickname', nullable: true })
   gameNickname: string;
 

@@ -158,6 +158,14 @@ export class CoinsService implements OnApplicationBootstrap {
   }
 
   async handleWebhook(body: any): Promise<void> {
+    // /start — приветствие с визуалом и кнопкой запуска WebApp
+    const msg = body?.message;
+    if (typeof msg?.text === 'string' && msg.text.trim().startsWith('/start')) {
+      await this.sendWelcome(msg.chat?.id, msg.chat?.type)
+        .catch((e) => this.logger.warn(`welcome failed: ${e?.response?.data?.description || e?.message}`));
+      return;
+    }
+
     const cb = body?.callback_query;
     if (!cb) return;
 
@@ -184,6 +192,38 @@ export class CoinsService implements OnApplicationBootstrap {
     try {
       await tgPost('answerCallbackQuery', { callback_query_id: cb.id, text: 'Готово' });
     } catch {}
+  }
+
+  /** Приветственное сообщение при /start: баннер + гайд + кнопка запуска Mini App. */
+  private async sendWelcome(chatId: number | undefined, chatType?: string): Promise<void> {
+    if (!chatId) return;
+    const appUrl = (process.env.FRONTEND_URL || process.env.PUBLIC_URL || '').replace(/\/$/, '');
+    const photo = `${appUrl}/welcome.png`;
+
+    const caption =
+      `<b>Добро пожаловать в CONDR FACEIT</b> ⚔️\n\n` +
+      `Соревновательный матчмейкинг для <b>Standoff 2</b>: честные команды по ELO, лиги, статистика и награды.\n\n` +
+      `<b>Как начать играть:</b>\n` +
+      `1️⃣ Нажми кнопку <b>«Открыть CONDR»</b> ниже\n` +
+      `2️⃣ Привяжи игровой ник и Game ID\n` +
+      `3️⃣ Выбери режим и жми <b>«Найти матч»</b>\n` +
+      `4️⃣ Заходи в лобби, играй 5×5 и поднимай ELO\n\n` +
+      `🏆 Лиги CPL · 🎯 Ачивки · 🪙 Магазин · 🎮 Мини-игры\n\n` +
+      `Удачи на поле боя!`;
+
+    // web_app-кнопка работает только в личке; в группах — обычная ссылка.
+    const button = chatType === 'private' && appUrl
+      ? { text: '🎮 Открыть CONDR', web_app: { url: appUrl } }
+      : { text: '🎮 Открыть CONDR', url: appUrl };
+    const reply_markup = { inline_keyboard: [[button]] };
+
+    try {
+      await tgPost('sendPhoto', { chat_id: chatId, photo, caption, parse_mode: 'HTML', reply_markup });
+    } catch (e: any) {
+      // Если Telegram не смог загрузить картинку — шлём текстом с той же кнопкой.
+      this.logger.warn(`welcome sendPhoto failed, fallback to text: ${e?.response?.data?.description || e?.message}`);
+      await tgPost('sendMessage', { chat_id: chatId, text: caption, parse_mode: 'HTML', reply_markup });
+    }
   }
 
   async getPurchaseStatus(purchaseId: number, userId: number) {

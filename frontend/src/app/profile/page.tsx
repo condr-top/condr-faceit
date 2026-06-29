@@ -16,6 +16,7 @@ import { useSheetDrag } from '@/lib/useSheetDrag'
 import { getEloRank, getRankProgress, ELO_RANKS, CHALLENGER_RANK, qualifiesChallenger } from '@/lib/eloRank'
 import { Flag } from '@/components/ui/Flag'
 import { RegionPicker } from '@/components/ui/RegionPicker'
+import { StreamerSettings } from '@/components/streamer/StreamerSettings'
 import { Icon, IconName } from '@/components/ui/Icon'
 import { useUiStore } from '@/store/uiStore'
 
@@ -838,6 +839,9 @@ export default function ProfilePage() {
               </div>
             </motion.div>
           )}
+
+          {/* ── ДЛЯ СТРИМЕРОВ (OBS-виджет) ── */}
+          <StreamerSettings />
 
           {/* ── ADMIN / MOD PANEL ── */}
           {(user.isAdmin || user.isModerator) && (

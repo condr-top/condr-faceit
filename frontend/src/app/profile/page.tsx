@@ -18,7 +18,7 @@ import { Flag } from '@/components/ui/Flag'
 import { RegionPicker } from '@/components/ui/RegionPicker'
 import { StreamerSettings } from '@/components/streamer/StreamerSettings'
 import { NotifSettings } from '@/components/settings/NotifSettings'
-import { getFrame, getTitle } from '@/lib/cosmetics'
+import { getFrame, getTitle, getBackground } from '@/lib/cosmetics'
 import { Icon, IconName } from '@/components/ui/Icon'
 import { useUiStore } from '@/store/uiStore'
 
@@ -333,6 +333,7 @@ export default function ProfilePage() {
   const accent = calibrating ? '#EAB308' : theme.color
   const profileFrame = getFrame(user.avatarFrame)
   const profileTitle = getTitle(user.title)
+  const profileBg = getBackground(user.profileBg)
   const rankProg = Math.round(getRankProgress(user.elo) * 100)
   const nextRank = ELO_RANKS.find(r => r.min > user.elo) || null
   const eloToNext = nextRank ? nextRank.min - user.elo : 0
@@ -366,6 +367,13 @@ export default function ProfilePage() {
               boxShadow: `0 12px 44px ${theme.color}16`,
             }}
           >
+            {/* Косметический фон профиля (виден другим) */}
+            {profileBg && (
+              <>
+                <span aria-hidden style={{ position: 'absolute', inset: 0, background: profileBg.css, pointerEvents: 'none' }} />
+                <span aria-hidden style={{ position: 'absolute', inset: 0, background: 'linear-gradient(160deg, rgba(8,8,11,0.5), rgba(8,8,11,0.8))', pointerEvents: 'none' }} />
+              </>
+            )}
             {/* Ambient glow blobs */}
             <div style={{ position: 'absolute', top: -70, left: -50, width: 200, height: 200, background: `radial-gradient(circle, ${theme.color}33, transparent 70%)`, pointerEvents: 'none' }} />
             <motion.div animate={{ opacity: [0.35, 0.65, 0.35] }} transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}

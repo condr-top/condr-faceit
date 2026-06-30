@@ -15,6 +15,7 @@ import { getEloRank } from '@/lib/eloRank'
 import { EloRing } from '@/components/ui/EloRing'
 import { ReportModal } from '@/components/reports/ReportModal'
 import { MatchChat } from '@/components/match/MatchChat'
+import { getPatch } from '@/lib/cosmetics'
 
 // Module-scope map image helper (для компонентов вне основного)
 const mapImgUrl = (name: string) => `/maps/${name.charAt(0).toUpperCase()}${name.slice(1).toLowerCase()}.webp`
@@ -41,7 +42,7 @@ export default function MatchPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
-  const [players, setPlayers] = useState<Record<number, { gameNickname: string; gameId: string; avatarUrl?: string; elo?: number; isVerified?: boolean; avatarFrame?: string | null }>>({})
+  const [players, setPlayers] = useState<Record<number, { gameNickname: string; gameId: string; avatarUrl?: string; elo?: number; isVerified?: boolean; avatarFrame?: string | null; patch?: string | null }>>({})
   const [reportTarget, setReportTarget] = useState<{ id: number; name: string } | null>(null)
   const [lobbyLinkInput, setLobbyLinkInput] = useState('')
   const [lobbyLinkSaving, setLobbyLinkSaving] = useState(false)
@@ -60,8 +61,8 @@ export default function MatchPage() {
     api.get('/users/batch', { params: { ids: ids.join(',') } })
       .then((r) => {
         if (!Array.isArray(r.data) || !r.data.length) return
-        const map: Record<number, { gameNickname: string; gameId: string; avatarUrl?: string; elo?: number; isVerified?: boolean; avatarFrame?: string | null }> = {}
-        r.data.forEach((p: any) => { map[p.id] = { gameNickname: p.gameNickname, gameId: p.gameId, avatarUrl: p.avatarUrl, elo: p.elo, isVerified: p.isVerified, avatarFrame: p.avatarFrame } })
+        const map: Record<number, { gameNickname: string; gameId: string; avatarUrl?: string; elo?: number; isVerified?: boolean; avatarFrame?: string | null; patch?: string | null }> = {}
+        r.data.forEach((p: any) => { map[p.id] = { gameNickname: p.gameNickname, gameId: p.gameId, avatarUrl: p.avatarUrl, elo: p.elo, isVerified: p.isVerified, avatarFrame: p.avatarFrame, patch: p.patch } })
         setPlayers((prev) => ({ ...prev, ...map }))
       })
       .catch(() => {})
@@ -484,8 +485,10 @@ export default function MatchPage() {
               (() => {
                 const allFilled = [...new Set(allSlotIds)].filter(Boolean)
                 const pct = totalSlots ? (filledSlots / totalSlots) * 100 : 0
-                const renderOrb = (pid: number | undefined, i: number) => (
-                  <div key={i} style={{ width: 52, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                const renderOrb = (pid: number | undefined, i: number) => {
+                  const slotPatch = pid ? getPatch(players[pid]?.patch) : null
+                  return (
+                  <div key={i} style={{ width: 54, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '6px 1px', borderRadius: 12, background: slotPatch ? `${slotPatch.css}, linear-gradient(rgba(255,255,255,0.02), rgba(255,255,255,0.02))` : 'transparent' }}>
                     {pid ? (
                       <motion.div
                         initial={{ scale: 0, y: 12, opacity: 0 }}
@@ -532,7 +535,8 @@ export default function MatchPage() {
                       color: pid ? '#9CA3AF' : '#374151',
                     }}>{pid ? (players[pid]?.gameNickname || '...') : 'поиск'}</span>
                   </div>
-                )
+                  )
+                }
 
                 return (
                   <div style={{

@@ -79,6 +79,26 @@ export class ShopController {
     return this.shopService.clearTitle(req.user.id);
   }
 
+  @Post('background/buy')
+  buyBackground(@Request() req: any, @Body('key') key: string) {
+    return this.shopService.buyBackground(req.user.id, key);
+  }
+
+  @Post('background/equip')
+  equipBackground(@Request() req: any, @Body('key') key: string | null) {
+    return this.shopService.equipBackground(req.user.id, key ?? null);
+  }
+
+  @Post('patch/buy')
+  buyPatch(@Request() req: any, @Body('key') key: string) {
+    return this.shopService.buyPatch(req.user.id, key);
+  }
+
+  @Post('patch/equip')
+  equipPatch(@Request() req: any, @Body('key') key: string | null) {
+    return this.shopService.equipPatch(req.user.id, key ?? null);
+  }
+
   @Post(':id/buy')
   buy(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
     return this.shopService.buyWithCoins(req.user.id, id);

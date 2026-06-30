@@ -199,6 +199,7 @@ export class UsersService {
       isVerified: u.isVerified ?? false,
       avatarFrame: u.avatarFrame ?? null,
       title: u.title ?? null,
+      patch: u.patch ?? null,
     }));
   }
 
@@ -312,6 +313,8 @@ export class UsersService {
       region: user.region ?? null,
       avatarFrame: user.avatarFrame ?? null,
       title: user.title ?? null,
+      profileBg: user.profileBg ?? null,
+      patch: user.patch ?? null,
       friendStatus,
     };
   }
@@ -332,6 +335,8 @@ export class UsersService {
       avatarFrame: user.avatarFrame ?? null,
       ownedFrames: user.ownedFrames ?? [],
       title: user.title ?? null,
+      profileBg: user.profileBg ?? null,
+      patch: user.patch ?? null,
       matchesPlayed: user.matchesPlayed,
       matchesWon: user.matchesWon,
       matchesLost: user.matchesLost,

@@ -6,12 +6,15 @@ import { api } from '@/lib/api'
 import { useAuthStore } from '@/store/authStore'
 import { Avatar } from '@/components/ui/Avatar'
 import { Icon, IconName } from '@/components/ui/Icon'
-import { FRAMES as FRAME_VIS, TITLES as TITLE_VIS } from '@/lib/cosmetics'
+import { FRAMES as FRAME_VIS, TITLES as TITLE_VIS, BACKGROUNDS as BG_VIS, PATCHES as PATCH_VIS } from '@/lib/cosmetics'
 
 interface Cat { key: string; name: string; price: number }
 interface Cosmetics {
-  frames: Cat[]; titles: Cat[]
-  ownedFrames: string[]; equippedFrame: string | null; title: string | null; coins: number
+  frames: Cat[]; titles: Cat[]; backgrounds: Cat[]; patches: Cat[]
+  ownedFrames: string[]; equippedFrame: string | null; title: string | null
+  ownedBackgrounds: string[]; equippedBackground: string | null
+  ownedPatches: string[]; equippedPatch: string | null
+  coins: number
 }
 
 function SectionHeader({ label, sub, color, icon }: { label: string; sub: string; color: string; icon: IconName }) {
@@ -106,6 +109,73 @@ export function CustomizationSection() {
                   <Icon name="coins" size={13} color="#fff" />{t.price.toLocaleString()}
                 </button>
               )}
+            </motion.div>
+          )
+        })}
+      </div>
+
+      {/* ── ФОНЫ ПРОФИЛЯ ── */}
+      <SectionHeader label="Фоны профиля" sub="Виден на плитке профиля (и другим)" color="#F59E0B" icon="image" />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        {c.backgrounds.map((b, i) => {
+          const vis = BG_VIS[b.key]
+          const owned = c.ownedBackgrounds.includes(b.key)
+          const eq = c.equippedBackground === b.key
+          const id = `bg_${b.key}`
+          return (
+            <motion.div key={b.key} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.03 * i }}
+              style={{ borderRadius: 16, overflow: 'hidden', border: `1px solid ${eq ? '#F59E0B88' : 'rgba(255,255,255,0.08)'}`, background: '#0f0f15' }}>
+              <div style={{ height: 64, background: vis?.css ?? '#16171d', position: 'relative' }}>
+                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(160deg, rgba(8,8,11,0.3), rgba(8,8,11,0.7))' }} />
+              </div>
+              <div style={{ padding: '10px 12px' }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: '#fff', marginBottom: 8 }}>{b.name}</div>
+                {eq ? (
+                  <button onClick={() => act(id, () => api.post('/shop/background/equip', { key: null }))} disabled={busy === id}
+                    style={{ width: '100%', padding: '7px 0', borderRadius: 9, border: '1px solid #F59E0B55', background: 'rgba(245,158,11,0.14)', color: '#F59E0B', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Надето · снять</button>
+                ) : owned ? (
+                  <button onClick={() => act(id, () => api.post('/shop/background/equip', { key: b.key }))} disabled={busy === id}
+                    style={{ width: '100%', padding: '7px 0', borderRadius: 9, border: 'none', background: 'linear-gradient(135deg, #F59E0B, #B45309)', color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Надеть</button>
+                ) : (
+                  <button onClick={() => { if (coins < b.price) return alert('Недостаточно монет'); act(id, () => api.post('/shop/background/buy', { key: b.key })) }} disabled={busy === id}
+                    style={{ width: '100%', padding: '7px 0', borderRadius: 9, border: 'none', background: coins >= b.price ? 'linear-gradient(135deg, #F59E0B, #B45309)' : 'rgba(255,255,255,0.07)', color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                    <Icon name="coins" size={13} color="#fff" />{b.price.toLocaleString()}</button>
+                )}
+              </div>
+            </motion.div>
+          )
+        })}
+      </div>
+
+      {/* ── НАШИВКИ ── */}
+      <SectionHeader label="Нашивки" sub="Фон твоей плитки в матче (виден всем)" color="#22D3EE" icon="shield" />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        {c.patches.map((p, i) => {
+          const vis = PATCH_VIS[p.key]
+          const owned = c.ownedPatches.includes(p.key)
+          const eq = c.equippedPatch === p.key
+          const id = `patch_${p.key}`
+          const col = vis?.accent ?? '#22D3EE'
+          return (
+            <motion.div key={p.key} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.03 * i }}
+              style={{ borderRadius: 16, overflow: 'hidden', border: `1px solid ${eq ? col + '88' : 'rgba(255,255,255,0.08)'}`, background: '#0f0f15' }}>
+              <div style={{ height: 48, background: `${vis?.css ?? ''}, linear-gradient(#16171d,#16171d)`, display: 'flex', alignItems: 'center', paddingLeft: 12 }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: '#cbd5e1' }}>nickname · 1834</span>
+              </div>
+              <div style={{ padding: '10px 12px' }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: '#fff', marginBottom: 8 }}>{p.name}</div>
+                {eq ? (
+                  <button onClick={() => act(id, () => api.post('/shop/patch/equip', { key: null }))} disabled={busy === id}
+                    style={{ width: '100%', padding: '7px 0', borderRadius: 9, border: `1px solid ${col}55`, background: `${col}1a`, color: col, fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Надето · снять</button>
+                ) : owned ? (
+                  <button onClick={() => act(id, () => api.post('/shop/patch/equip', { key: p.key }))} disabled={busy === id}
+                    style={{ width: '100%', padding: '7px 0', borderRadius: 9, border: 'none', background: `linear-gradient(135deg, ${col}, ${col}aa)`, color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Надеть</button>
+                ) : (
+                  <button onClick={() => { if (coins < p.price) return alert('Недостаточно монет'); act(id, () => api.post('/shop/patch/buy', { key: p.key })) }} disabled={busy === id}
+                    style={{ width: '100%', padding: '7px 0', borderRadius: 9, border: 'none', background: coins >= p.price ? `linear-gradient(135deg, ${col}, ${col}aa)` : 'rgba(255,255,255,0.07)', color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                    <Icon name="coins" size={13} color="#fff" />{p.price.toLocaleString()}</button>
+                )}
+              </div>
             </motion.div>
           )
         })}

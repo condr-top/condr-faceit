@@ -8,6 +8,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { Flag } from '@/components/ui/Flag'
 import { Icon } from '@/components/ui/Icon'
 import { EloRing } from '@/components/ui/EloRing'
+import { getPatch } from '@/lib/cosmetics'
 
 const GREEN = '#22C55E', YELLOW = '#EAB308', RED = '#EF4444', GREY = '#6B7280'
 const BLUE = '#60A5FA', REDT = '#F87171'
@@ -24,6 +25,7 @@ interface SPlayer {
   kdMatch: number; ratingMatch: number; eloChange: number
   calibration?: boolean
   avatarFrame?: string | null
+  patch?: string | null
 }
 interface Summary {
   id: number; map: string | null; winnerTeam: string
@@ -37,6 +39,9 @@ interface Summary {
 // ── Player row ─────────────────────────────────────────────────────────────────
 function PlayerRow({ p, accent, isMvp, delay, onClick }: { p: SPlayer; accent: string; isMvp: boolean; delay: number; onClick: () => void }) {
   const rc = ratingColor(p.ratingMatch)
+  const patch = getPatch(p.patch)
+  const baseBg = isMvp ? 'linear-gradient(135deg, rgba(234,179,8,0.14), rgba(255,255,255,0.02))' : 'linear-gradient(rgba(255,255,255,0.03), rgba(255,255,255,0.03))'
+  const rowBg = patch ? `${patch.css}, ${baseBg}` : baseBg
   return (
     <motion.button
       initial={{ opacity: 0, x: -10 }}
@@ -47,7 +52,7 @@ function PlayerRow({ p, accent, isMvp, delay, onClick }: { p: SPlayer; accent: s
       style={{
         width: '100%', display: 'flex', alignItems: 'center', gap: 10,
         padding: '9px 11px', borderRadius: 13, cursor: 'pointer', textAlign: 'left',
-        background: isMvp ? 'linear-gradient(135deg, rgba(234,179,8,0.14), rgba(255,255,255,0.02))' : 'rgba(255,255,255,0.03)',
+        background: rowBg,
         border: isMvp ? '1px solid rgba(234,179,8,0.4)' : '1px solid rgba(255,255,255,0.06)',
       }}
     >

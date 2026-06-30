@@ -113,6 +113,20 @@ export class User {
   @Column({ name: 'title', nullable: true })
   title: string;
 
+  // Фон профиля (ключ из cosmetics.BACKGROUNDS) + купленные
+  @Column({ name: 'profile_bg', nullable: true })
+  profileBg: string;
+
+  @Column({ name: 'owned_backgrounds', type: 'jsonb', default: [] })
+  ownedBackgrounds: string[];
+
+  // Нашивка — фон плитки игрока в матче (ключ из cosmetics.PATCHES) + купленные
+  @Column({ name: 'patch', nullable: true })
+  patch: string;
+
+  @Column({ name: 'owned_patches', type: 'jsonb', default: [] })
+  ownedPatches: string[];
+
   // Токен публичного OBS-виджета для стримеров (ссылка вида /obs/<token>)
   @Index()
   @Column({ name: 'stream_token', nullable: true })

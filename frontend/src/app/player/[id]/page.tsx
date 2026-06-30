@@ -13,7 +13,7 @@ import { MatchCard } from '@/components/ui/MatchCard'
 import { getEloRank, getRankProgress, ELO_RANKS, CHALLENGER_RANK, qualifiesChallenger } from '@/lib/eloRank'
 import { Flag } from '@/components/ui/Flag'
 import { Icon, IconName } from '@/components/ui/Icon'
-import { getFrame, getTitle } from '@/lib/cosmetics'
+import { getFrame, getTitle, getBackground } from '@/lib/cosmetics'
 
 interface PublicProfile {
   id: number
@@ -39,6 +39,7 @@ interface PublicProfile {
   region?: string | null
   avatarFrame?: string | null
   title?: string | null
+  profileBg?: string | null
 }
 
 // ── Skeleton loader ───────────────────────────────────────────────────────────
@@ -158,6 +159,7 @@ export default function PlayerPage() {
   const accent = calibrating ? '#EAB308' : theme.color
   const playerFrame = getFrame(profile.avatarFrame)
   const playerTitle = getTitle(profile.title)
+  const playerBg = getBackground(profile.profileBg)
   const displayName = profile.gameNickname || profile.firstName
   const warns = profile.warns ?? 0
   const rankProg = Math.round(getRankProgress(profile.elo) * 100)
@@ -213,6 +215,12 @@ export default function PlayerPage() {
             boxShadow: `0 12px 44px ${theme.color}16`,
           }}
         >
+          {playerBg && (
+            <>
+              <span aria-hidden style={{ position: 'absolute', inset: 0, background: playerBg.css, pointerEvents: 'none' }} />
+              <span aria-hidden style={{ position: 'absolute', inset: 0, background: 'linear-gradient(160deg, rgba(8,8,11,0.5), rgba(8,8,11,0.8))', pointerEvents: 'none' }} />
+            </>
+          )}
           <div style={{ position: 'absolute', top: -70, left: -50, width: 200, height: 200, background: `radial-gradient(circle, ${theme.color}33, transparent 70%)`, pointerEvents: 'none' }} />
           <motion.div animate={{ x: ['-100%', '220%'] }} transition={{ duration: 4, repeat: Infinity, ease: 'linear', repeatDelay: 7 }}
             style={{ position: 'absolute', top: 0, bottom: 0, width: '30%', background: `linear-gradient(90deg, transparent, ${theme.color}14, transparent)`, pointerEvents: 'none' }} />

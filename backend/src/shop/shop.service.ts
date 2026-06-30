@@ -5,7 +5,7 @@ import { ShopItem } from './entities/shop-item.entity';
 import { UserInventory } from './entities/user-inventory.entity';
 import { User } from '../users/entities/user.entity';
 import { tgPost } from '../common/telegram';
-import { FRAMES, TITLES, FRAME_KEYS, TITLE_KEYS } from './cosmetics';
+import { FRAMES, TITLES, BACKGROUNDS, PATCHES, FRAME_KEYS, TITLE_KEYS, BG_KEYS, PATCH_KEYS } from './cosmetics';
 
 // Цены услуг в CONDR COIN (единственный источник правды — меняй здесь)
 export const SERVICE_PRICES = {
@@ -194,12 +194,57 @@ export class ShopService {
     return {
       frames: FRAMES,
       titles: TITLES,
+      backgrounds: BACKGROUNDS,
+      patches: PATCHES,
       ownedFrames: user.ownedFrames ?? [],
       equippedFrame: user.avatarFrame ?? null,
       title: user.title ?? null,
+      ownedBackgrounds: user.ownedBackgrounds ?? [],
+      equippedBackground: user.profileBg ?? null,
+      ownedPatches: user.ownedPatches ?? [],
+      equippedPatch: user.patch ?? null,
       coins: user.coins,
     };
   }
+
+  /** Универсальная покупка предмета коллекции (рамка/фон/нашивка): owned[]+equip. */
+  private async buyCollectible(
+    userId: number, key: string, validKeys: string[], catalog: { key: string; price: number }[],
+    ownedField: 'ownedFrames' | 'ownedBackgrounds' | 'ownedPatches',
+    equipField: 'avatarFrame' | 'profileBg' | 'patch',
+  ): Promise<any> {
+    if (!validKeys.includes(key)) throw new BadRequestException('Неизвестный предмет');
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    const owned = (user[ownedField] as string[]) ?? [];
+    if (!owned.includes(key)) {
+      const price = catalog.find((x) => x.key === key)!.price;
+      if ((user.coins ?? 0) < price) throw new BadRequestException('Недостаточно монет');
+      user.coins -= price;
+      (user[ownedField] as string[]) = [...owned, key];
+    }
+    (user[equipField] as any) = key;
+    await this.userRepo.save(user);
+    return { ok: true, coins: user.coins, owned: user[ownedField], equipped: user[equipField] };
+  }
+
+  private async equipCollectible(
+    userId: number, key: string | null,
+    ownedField: 'ownedFrames' | 'ownedBackgrounds' | 'ownedPatches',
+    equipField: 'avatarFrame' | 'profileBg' | 'patch',
+  ): Promise<any> {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    if (key && !((user[ownedField] as string[]) ?? []).includes(key)) throw new BadRequestException('Предмет не куплен');
+    (user[equipField] as any) = key || null;
+    await this.userRepo.save(user);
+    return { ok: true, equipped: user[equipField] };
+  }
+
+  buyBackground(userId: number, key: string) { return this.buyCollectible(userId, key, BG_KEYS, BACKGROUNDS, 'ownedBackgrounds', 'profileBg'); }
+  equipBackground(userId: number, key: string | null) { return this.equipCollectible(userId, key, 'ownedBackgrounds', 'profileBg'); }
+  buyPatch(userId: number, key: string) { return this.buyCollectible(userId, key, PATCH_KEYS, PATCHES, 'ownedPatches', 'patch'); }
+  equipPatch(userId: number, key: string | null) { return this.equipCollectible(userId, key, 'ownedPatches', 'patch'); }
 
   /** Купить рамку (добавляется в коллекцию и сразу надевается). */
   async buyFrame(userId: number, key: string): Promise<any> {

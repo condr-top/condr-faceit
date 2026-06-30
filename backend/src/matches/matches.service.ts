@@ -1424,6 +1424,7 @@ export class MatchesService {
         avatarUrl: u?.avatarUrl ?? null,
         avatarFrame: u?.avatarFrame ?? null,
         title: u?.title ?? null,
+        patch: u?.patch ?? null,
         elo: u?.elo ?? 1000,
         region: u?.region ?? null,
         isVerified: u?.isVerified ?? false,

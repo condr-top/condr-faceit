@@ -95,7 +95,7 @@ export default function WebProfile() {
             <Stat label="Винрейт" value={`${user.winRate}%`} color={user.winRate >= 50 ? GREEN : YELLOW} icon="trendingUp" />
             <Stat label="W / L" value={`${user.matchesWon}/${user.matchesLost}`} color={GREEN} icon="trophy" />
             <Stat label="K/D" value={kd.toFixed(2)} color={kdColor} icon="swords" />
-            <Stat label="Ср. убийств" value={Number(user.avgKills ?? 0).toFixed(1)} color="#A855F7" icon="skull" />
+            <Stat label="Ср. убийств" value={String(Math.round(Number(user.avgKills ?? 0)))} color="#A855F7" icon="skull" />
             <Stat label="Рейтинг" value={rating.toFixed(2)} color={ratingColor} icon="barChart" />
           </div>
 

@@ -592,7 +592,7 @@ export default function ProfilePage() {
           {/* Skill tiles (colored by value) */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
             <StatCard label="K/D" value={kdVal.toFixed(2)}  color={kdColor}  icon="swords" delay={0.08} />
-            <StatCard label="AVG" value={avgVal.toFixed(1)} color={avgColor} icon="skull"  delay={0.11} />
+            <StatCard label="AVG" value={String(Math.round(avgVal))} color={avgColor} icon="skull"  delay={0.11} />
           </div>
 
           {/* Volume tiles (neutral grey) */}

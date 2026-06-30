@@ -22,6 +22,7 @@ interface SPlayer {
   elo: number; region: string | null; isVerified: boolean; isAdmin: boolean
   kills: number; deaths: number; assists: number
   kdMatch: number; ratingMatch: number; eloChange: number
+  calibration?: boolean
 }
 interface Summary {
   id: number; map: string | null; winnerTeam: string
@@ -49,7 +50,7 @@ function PlayerRow({ p, accent, isMvp, delay, onClick }: { p: SPlayer; accent: s
         border: isMvp ? '1px solid rgba(234,179,8,0.4)' : '1px solid rgba(255,255,255,0.06)',
       }}
     >
-      <EloRing elo={p.elo} size={32} showLabel={false} />
+      <EloRing elo={p.elo} size={32} showLabel={false} calibrating={!!p.calibration} />
       <div style={{ position: 'relative', flexShrink: 0 }}>
         <Avatar avatarUrl={p.avatarUrl} name={p.nickname} size={34} style={{ borderRadius: '50%', border: `1.5px solid ${accent}40` }} />
       </div>
@@ -66,7 +67,9 @@ function PlayerRow({ p, accent, isMvp, delay, onClick }: { p: SPlayer; accent: s
         </div>
         <div style={{ fontSize: 10, color: '#6B7280', fontWeight: 600, marginTop: 1 }}>
           KD <b style={{ color: '#9CA3AF' }}>{p.kdMatch.toFixed(2)}</b>
-          {p.eloChange !== 0 && (
+          {p.calibration ? (
+            <span style={{ color: YELLOW, marginLeft: 6, fontWeight: 900 }}>?</span>
+          ) : p.eloChange !== 0 && (
             <span style={{ color: p.eloChange > 0 ? GREEN : RED, marginLeft: 6, fontWeight: 700 }}>
               {p.eloChange > 0 ? '+' : ''}{p.eloChange}
             </span>

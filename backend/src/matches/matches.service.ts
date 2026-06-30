@@ -1400,6 +1400,21 @@ export class MatchesService {
     const users = allIds.length ? await this.userRepo.findBy({ id: In(allIds) }) : [];
     const uMap = Object.fromEntries(users.map((u) => [u.id, u]));
 
+    // Калибровочный матч для игрока = он среди его первых 10 сыгранных.
+    // Считаем число матчей игрока на момент этого матча (включительно).
+    const calMap: Record<number, boolean> = {};
+    if (allIds.length) {
+      const counts = await this.playerRepo
+        .createQueryBuilder('mp')
+        .select('mp.user_id', 'uid')
+        .addSelect('COUNT(DISTINCT mp.match_id)', 'cnt')
+        .where('mp.user_id IN (:...ids)', { ids: allIds })
+        .andWhere('mp.created_at <= :ts', { ts: match.createdAt })
+        .groupBy('mp.user_id')
+        .getRawMany();
+      for (const c of counts) calMap[Number(c.uid)] = Number(c.cnt) <= 10;
+    }
+
     const buildPlayer = (uid: number) => {
       const u: User | undefined = uMap[uid];
       const p = byUser.get(uid);
@@ -1421,6 +1436,7 @@ export class MatchesService {
         ratingMatch: pick(p, 'ratingMatch'),
         eloChange: pick(p, 'eloChange'),
         eloAfter: pick(p, 'eloAfter'),
+        calibration: calMap[uid] ?? false,
       };
     };
 

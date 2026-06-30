@@ -3,39 +3,43 @@
 import { motion } from 'framer-motion'
 import { getEloRank } from '@/lib/eloRank'
 import { Icon } from '@/components/ui/Icon'
+import { Flag } from '@/components/ui/Flag'
 
 export interface ObsStats {
   nickname: string
-  avatarUrl?: string | null
   isVerified?: boolean
   elo: number
   rating: number
   kd: number
+  avg: number
   matchesPlayed: number
   calibrating: boolean
   calibrationPlayed: number
   calibrationTotal: number
-  form: string[] // ['W','L','D'...] хронологически
+  form: string[]            // ['W','L','D'...] хронологически (слева — старее)
+  region?: string | null
+  globalRank?: number | null
+  regionalRank?: number | null
 }
 
-const FORM_META: Record<string, { c: string; bg: string }> = {
-  W: { c: '#22C55E', bg: 'rgba(34,197,94,0.18)' },
-  L: { c: '#EF4444', bg: 'rgba(239,68,68,0.18)' },
-  D: { c: '#9CA3AF', bg: 'rgba(156,163,175,0.16)' },
-}
+const FORM_C: Record<string, string> = { W: '#22C55E', L: '#EF4444', D: '#9CA3AF' }
 
 function Stat({ label, value, color }: { label: string; value: string; color: string }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, minWidth: 70 }}>
-      <div style={{ fontSize: 26, fontWeight: 900, color: '#fff', lineHeight: 1, fontVariantNumeric: 'tabular-nums', textShadow: `0 2px 14px ${color}55` }}>{value}</div>
-      <div style={{ fontSize: 9.5, fontWeight: 800, color, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{label}</div>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, minWidth: 56 }}>
+      <div style={{ fontSize: 30, fontWeight: 900, color: '#fff', lineHeight: 1, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em' }}>{value}</div>
+      <div style={{ fontSize: 10, fontWeight: 800, color, textTransform: 'uppercase', letterSpacing: '0.12em' }}>{label}</div>
     </div>
   )
 }
 
+function Divider() {
+  return <div style={{ width: 1, alignSelf: 'stretch', margin: '4px 0', background: 'linear-gradient(180deg, transparent, rgba(255,255,255,0.12), transparent)' }} />
+}
+
 /**
- * Виджет статистики для OBS / стрима. Прозрачный внешний фон — рисуется только
- * стеклянная карточка. Используется и на публичной странице /obs/[token], и в превью настроек.
+ * OBS / стрим виджет. Прозрачный внешний фон — рисуется только стеклянная карточка.
+ * Структура: значок ранга + ник + ELO/калибровка · AVG · KD · RATING · мир/регион · форма.
  */
 export function StreamerWidget({ stats }: { stats: ObsStats }) {
   const rank = getEloRank(stats.elo)
@@ -45,74 +49,84 @@ export function StreamerWidget({ stats }: { stats: ObsStats }) {
 
   return (
     <div style={{
-      position: 'relative', width: 600, borderRadius: 22, overflow: 'hidden',
-      background: `radial-gradient(140% 140% at 0% 0%, ${accent}24, transparent 52%), linear-gradient(150deg, rgba(18,18,24,0.96), rgba(8,8,11,0.97))`,
-      border: `1px solid ${accent}40`, boxShadow: `0 18px 50px rgba(0,0,0,0.5), 0 0 40px ${accent}1f`,
-      padding: 18, fontFamily: 'inherit',
+      position: 'relative', width: 620, borderRadius: 22, overflow: 'hidden',
+      background: `radial-gradient(120% 130% at 0% 0%, ${accent}1f, transparent 50%), linear-gradient(150deg, rgba(19,19,25,0.97), rgba(8,8,11,0.98))`,
+      border: `1px solid ${accent}3a`, boxShadow: `0 18px 50px rgba(0,0,0,0.5), 0 0 44px ${accent}1c`,
+      padding: '15px 18px', fontFamily: 'inherit',
     }}>
       {/* breathing accent halo */}
-      <motion.div aria-hidden animate={{ opacity: [0.5, 0.85, 0.5] }} transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-        style={{ position: 'absolute', top: -60, left: -40, width: 260, height: 260, borderRadius: '50%', background: `radial-gradient(circle, ${accent}33, transparent 70%)`, pointerEvents: 'none' }} />
-      {/* top hairline */}
-      <div style={{ position: 'absolute', top: 0, left: '14%', right: '14%', height: 1, background: `linear-gradient(90deg, transparent, ${accent}, transparent)` }} />
-      {/* dotted texture */}
-      <div style={{ position: 'absolute', inset: 0, opacity: 0.4, pointerEvents: 'none', backgroundImage: 'radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px)', backgroundSize: '20px 20px', WebkitMaskImage: 'radial-gradient(120% 120% at 100% 0%, #000 20%, transparent 70%)' }} />
+      <motion.div aria-hidden animate={{ opacity: [0.45, 0.8, 0.45] }} transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+        style={{ position: 'absolute', top: -70, left: -50, width: 280, height: 280, borderRadius: '50%', background: `radial-gradient(circle, ${accent}30, transparent 70%)`, pointerEvents: 'none' }} />
+      {/* dotted texture, fading to the right */}
+      <div style={{ position: 'absolute', inset: 0, opacity: 0.4, pointerEvents: 'none', backgroundImage: 'radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px)', backgroundSize: '20px 20px', WebkitMaskImage: 'radial-gradient(130% 130% at 100% 0%, #000 18%, transparent 72%)' }} />
 
-      {/* Header: avatar + nickname + rank badge */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, position: 'relative', marginBottom: 14 }}>
-        <div style={{ position: 'relative', width: 52, height: 52, borderRadius: 14, flexShrink: 0, overflow: 'hidden', border: `2px solid ${accent}`, boxShadow: `0 0 18px ${accent}55` }}>
-          {stats.avatarUrl
-            ? <img src={stats.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            : <div style={{ width: '100%', height: '100%', background: `linear-gradient(135deg, ${accent}, ${accent}88)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 22, color: '#fff' }}>{(stats.nickname || '?').charAt(0).toUpperCase()}</div>}
+      {/* ── Top row ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, position: 'relative' }}>
+        {/* Rank badge */}
+        <div style={{ position: 'relative', width: 58, height: 58, flexShrink: 0, borderRadius: 15, overflow: 'hidden', border: `2px solid ${accent}`, boxShadow: `0 0 20px ${accent}55` }}>
+          <img src={rankImg} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
+
+        {/* Nick + ELO / calibration */}
+        <div style={{ minWidth: 0, width: 168 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ fontSize: 20, fontWeight: 900, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: '-0.02em' }}>{stats.nickname}</span>
-            {stats.isVerified && <Icon name="verified" size={17} color="#3B82F6" />}
+            {stats.isVerified && <Icon name="verified" size={16} color="#3B82F6" />}
           </div>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 4, padding: '3px 9px 3px 4px', borderRadius: 20, background: rank.bg, border: `1px solid ${accent}55` }}>
-            <img src={rankImg} alt="" style={{ width: 20, height: 20, borderRadius: 5, objectFit: 'cover' }} />
-            <span style={{ fontSize: 11.5, fontWeight: 900, color: accent, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{rank.label}</span>
-          </div>
-        </div>
-        <img src="/logo_vectorized.svg" alt="" style={{ width: 30, height: 30, opacity: 0.5, flexShrink: 0 }} />
-      </div>
-
-      {/* Stats row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, position: 'relative' }}>
-        {/* ELO / calibration */}
-        <div style={{ flex: 1, borderRadius: 14, padding: '12px 14px', background: 'rgba(255,255,255,0.04)', border: `1px solid ${accent}33`, minWidth: 0 }}>
           {stats.calibrating ? (
-            <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 7 }}>
-                <span style={{ fontSize: 10, fontWeight: 800, color: accent, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Калибровка</span>
-                <span style={{ fontSize: 16, fontWeight: 900, color: '#fff', fontVariantNumeric: 'tabular-nums' }}>{stats.calibrationPlayed}<span style={{ color: '#6B7280', fontSize: 13 }}>/{stats.calibrationTotal}</span></span>
+            <div style={{ marginTop: 5 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
+                <span style={{ fontSize: 22, fontWeight: 900, color: accent, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{stats.calibrationPlayed}<span style={{ color: '#6B7280', fontSize: 15 }}>/{stats.calibrationTotal}</span></span>
+                <span style={{ fontSize: 9.5, fontWeight: 800, color: accent, textTransform: 'uppercase', letterSpacing: '0.1em' }}>калибровка</span>
               </div>
-              <div style={{ height: 7, borderRadius: 4, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-                <div style={{ width: `${calPct}%`, height: '100%', borderRadius: 4, background: `linear-gradient(90deg, ${accent}, ${accent}aa)`, boxShadow: `0 0 8px ${accent}` }} />
+              <div style={{ height: 5, marginTop: 5, borderRadius: 3, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                <div style={{ width: `${calPct}%`, height: '100%', borderRadius: 3, background: `linear-gradient(90deg, ${accent}, ${accent}aa)`, boxShadow: `0 0 8px ${accent}` }} />
               </div>
-            </>
+            </div>
           ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <Stat label="ELO" value={String(stats.elo)} color={accent} />
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 4 }}>
+              <Icon name="trendingUp" size={15} color={accent} />
+              <span style={{ fontSize: 26, fontWeight: 900, color: '#fff', lineHeight: 1, fontVariantNumeric: 'tabular-nums', textShadow: `0 2px 14px ${accent}66` }}>{stats.elo.toLocaleString()}</span>
+              <span style={{ fontSize: 10, fontWeight: 800, color: accent, textTransform: 'uppercase', letterSpacing: '0.1em' }}>ELO</span>
             </div>
           )}
         </div>
 
-        <Stat label="Rating" value={stats.rating.toFixed(2)} color="#A855F7" />
-        <Stat label="K/D" value={stats.kd.toFixed(2)} color="#EAB308" />
+        {/* Stats */}
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 16 }}>
+          <Stat label="AVG" value={String(stats.avg)} color="#9CA3AF" />
+          <Divider />
+          <Stat label="K/D" value={stats.kd.toFixed(2)} color="#EAB308" />
+          <Divider />
+          <Stat label="Rating" value={stats.rating.toFixed(2)} color="#A855F7" />
+        </div>
+      </div>
+
+      {/* ── Hairline ── */}
+      <div style={{ height: 1, margin: '13px 0 11px', background: `linear-gradient(90deg, transparent, ${accent}99, ${accent}55, transparent)` }} />
+
+      {/* ── Bottom row ── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          {/* World rank */}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Icon name="globe" size={15} color="#60A5FA" />
+            <span style={{ fontSize: 14, fontWeight: 800, color: '#E5E7EB', fontVariantNumeric: 'tabular-nums' }}>#{stats.globalRank ?? '—'}</span>
+          </span>
+          {/* Regional rank */}
+          {stats.region && stats.regionalRank && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <Flag code={stats.region} size={15} />
+              <span style={{ fontSize: 14, fontWeight: 800, color: '#E5E7EB', fontVariantNumeric: 'tabular-nums' }}>#{stats.regionalRank}</span>
+            </span>
+          )}
+        </div>
 
         {/* Form */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {(stats.form.length ? stats.form : ['—']).map((f, i) => {
-              const m = FORM_META[f] || FORM_META.D
-              return (
-                <div key={i} style={{ width: 22, height: 22, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 900, color: m.c, background: m.bg, border: `1px solid ${m.c}55` }}>{f}</div>
-              )
-            })}
-          </div>
-          <div style={{ fontSize: 9.5, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Форма · 5</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+          {(stats.form.length ? stats.form : ['—']).map((f, i) => (
+            <span key={i} style={{ fontSize: 17, fontWeight: 900, color: FORM_C[f] || '#9CA3AF', textShadow: `0 0 10px ${(FORM_C[f] || '#9CA3AF')}66`, fontVariantNumeric: 'tabular-nums' }}>{f}</span>
+          ))}
         </div>
       </div>
     </div>

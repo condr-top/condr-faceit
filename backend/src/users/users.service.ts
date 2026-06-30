@@ -82,18 +82,32 @@ export class UsersService {
       .map((p) => (p.eloChange > 0 ? 'W' : p.eloChange < 0 ? 'L' : 'D'))
       .reverse(); // в хронологическом порядке (слева — старее)
 
+    // Позиция в мировом и региональном рейтинге (tie-break по id, как в leaderboard)
+    const rankQ = (region?: string) => {
+      let qb = this.userRepo.createQueryBuilder('u')
+        .where('u.is_banned = false')
+        .andWhere('(u.elo > :elo OR (u.elo = :elo AND u.id < :id))', { elo: user.elo, id: user.id });
+      if (region) qb = qb.andWhere('u.region = :region', { region });
+      return qb.getCount();
+    };
+    const globalRank = (await rankQ()) + 1;
+    const regionalRank = user.region ? (await rankQ(user.region)) + 1 : null;
+
     return {
       nickname: user.gameNickname || user.firstName || 'Игрок',
-      avatarUrl: user.avatarUrl || null,
       isVerified: !!user.isVerified,
       elo: user.elo,
       rating: user.ratingOverall,
       kd: user.kdr,
+      avg: user.matchesPlayed ? Math.round(user.killsTotal / user.matchesPlayed) : 0,
       matchesPlayed: user.matchesPlayed,
       calibrating: user.matchesPlayed < 10,
       calibrationPlayed: Math.min(user.matchesPlayed, 10),
       calibrationTotal: 10,
       form,
+      region: user.region ?? null,
+      globalRank,
+      regionalRank,
     };
   }
 

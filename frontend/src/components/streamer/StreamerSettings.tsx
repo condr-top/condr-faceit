@@ -39,7 +39,7 @@ export function StreamerSettings() {
   // Масштабируем превью (виджет 600px) под ширину карточки
   useLayoutEffect(() => {
     const w = wrapRef.current?.clientWidth || 330
-    const s = Math.min(1, w / 600)
+    const s = Math.min(1, w / 620)
     setScale(s)
     const h = innerRef.current?.offsetHeight || 200
     setPreviewH(Math.ceil(h * s))
@@ -71,13 +71,13 @@ export function StreamerSettings() {
         <span style={{ fontSize: 10, color: ACCENT, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Для стримеров</span>
       </div>
       <div style={{ fontSize: 11.5, color: '#9CA3AF', lineHeight: 1.45, marginBottom: 12 }}>
-        Виджет статистики для OBS. Добавь <b style={{ color: '#fff' }}>Источник → Браузер</b> и вставь ссылку. Размер: <b style={{ color: '#fff' }}>600×200</b>, фон прозрачный.
+        Виджет статистики для OBS. Добавь <b style={{ color: '#fff' }}>Источник → Браузер</b> и вставь ссылку. Размер: <b style={{ color: '#fff' }}>640×200</b>, фон прозрачный.
       </div>
 
       {/* Live preview */}
       <div ref={wrapRef} style={{ width: '100%', height: stats ? previewH : 150, overflow: 'hidden', borderRadius: 16, marginBottom: 12, background: 'repeating-conic-gradient(rgba(255,255,255,0.04) 0% 25%, transparent 0% 50%) 0 / 18px 18px' }}>
         {stats
-          ? <div ref={innerRef} style={{ width: 600, transform: `scale(${scale})`, transformOrigin: 'top left' }}><StreamerWidget stats={stats} /></div>
+          ? <div ref={innerRef} style={{ width: 620, transform: `scale(${scale})`, transformOrigin: 'top left' }}><StreamerWidget stats={stats} /></div>
           : <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4B5563', fontSize: 12 }}>Загрузка превью…</div>}
       </div>
 

@@ -28,7 +28,7 @@ export function EloRing({ elo, size = 64, isChallenger = false, showLabel = true
   // (Telegram webview) держат старую картинку после обновления набора
   const RANKS_V = 2
   const img = calibrating
-    ? `/ranks/calibration.png?v=3`
+    ? `/ranks/calibration.jpg?v=${RANKS_V}`
     : isChallenger ? `/ranks/challenger.jpg?v=${RANKS_V}` : `/ranks/${rank.level}.jpg?v=${RANKS_V}`
   const labelSize = size < 50 ? 8 : 9
 

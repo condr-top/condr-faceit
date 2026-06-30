@@ -98,7 +98,7 @@ export function MatchCard({ m, fallbackElo, delay = 0 }: { m: MatchItem; fallbac
           <EloRing elo={orbElo} size={32} showLabel={false} calibrating={!!m.calibration} />
 
           {m.calibration ? (
-            <span style={{ color: YELLOW, fontWeight: 800, fontSize: 13, letterSpacing: '0.02em', textShadow: '0 1px 4px rgba(0,0,0,0.7)' }}>Калибровка</span>
+            <span style={{ color: YELLOW, fontWeight: 800, fontSize: 13, letterSpacing: '0.02em', textShadow: '0 1px 4px rgba(0,0,0,0.7)', position: 'relative', top: 3 }}>Калибровка</span>
           ) : (
             <>
               {(m.eloAfter ?? 0) > 0 && (

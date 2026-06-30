@@ -19,6 +19,7 @@ import { LeaderboardModule } from './leaderboard/leaderboard.module';
 import { MissionsModule } from './missions/missions.module';
 import { AchievementsModule } from './achievements/achievements.module';
 import { ShopModule } from './shop/shop.module';
+import { GamesModule } from './games/games.module';
 import { TournamentsModule } from './tournaments/tournaments.module';
 import { AdminModule } from './admin/admin.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -128,6 +129,7 @@ import { InviteCode } from './invite/entities/invite-code.entity';
     MissionsModule,
     AchievementsModule,
     ShopModule,
+    GamesModule,
     TournamentsModule,
     AdminModule,
     NotificationsModule,

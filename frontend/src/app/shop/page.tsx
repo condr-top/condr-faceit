@@ -306,23 +306,13 @@ export default function ShopPage() {
         {/* Кастомизация — рамки аватара и титулы */}
         <CustomizationSection />
 
-        {/* Sections */}
-        {SECTIONS.map((s, si) => {
-          const secItems = items.filter(it => s.types.includes(it.type) && it.priceCoins > 0)
-          const showComing = s.comingSoon || secItems.length === 0
-          return (
-            <div key={s.key}>
-              <SectionHeader label={s.label} sub={s.sub} color={s.color} icon={s.icon} />
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                {showComing
-                  ? [0, 1].map(i => <ComingSoonCard key={i} color={s.color} delay={0.04 * i} />)
-                  : secItems.map((it, i) => (
-                    <ItemCard key={it.id} item={it} delay={0.04 * i} buying={buying === it.id} canAfford={(user?.coins ?? 0) >= it.priceCoins} onBuy={() => buy(it)} />
-                  ))}
-              </div>
-            </div>
-          )
-        })}
+        {/* CONDR Игры — кейсы / колесо / слоты */}
+        <SectionHeader label="CONDR Игры" sub="Кейсы, колесо фортуны и слоты" color="#E8092E" icon="box" />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <HeroTile tag="Кейс" title="CONDR CASE" subtitle="Рамки, фоны, премиум и монеты" c1="#E8092E" c2="#F97316" icon="box" delay={0.05} onClick={() => router.push('/games/case')} />
+          <HeroTile tag="Колесо" title="CONDR WHEEL" subtitle="Крути колесо фортуны" c1="#A855F7" c2="#6D28D9" icon="target" delay={0.1} onClick={() => router.push('/games/wheel')} />
+          <HeroTile tag="Слоты" title="CONDR SLOTS" subtitle="Собери 3 в ряд — джекпот 10 000" c1="#EAB308" c2="#F59E0B" icon="sparkles" delay={0.15} onClick={() => router.push('/games/slots')} />
+        </div>
       </div>
 
       <AnimatePresence>

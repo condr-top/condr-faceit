@@ -311,24 +311,15 @@ export default function DashboardPage() {
                 onClick={() => router.push('/profile')}
                 style={{ position: 'relative', background: 'none', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0 }}
               >
-                {/* По-дефолту — тонкая обводка; косметическая рамка (frame) рисуется поверх */}
+                {/* Без рамки — тонкая ранговая обводка; с рамкой — её отдаёт сам Avatar */}
                 <div style={{ position: 'relative', zIndex: 1 }}>
                   <Avatar
                     avatarUrl={user.avatarUrl}
                     name={user.gameNickname || user.firstName}
                     size={56}
                     frame={user.avatarFrame}
-                    style={{ border: `1.5px solid ${user.avatarFrame ? 'rgba(255,255,255,0.12)' : rank.color + '66'}`, borderRadius: '50%' }}
+                    style={user.avatarFrame ? { borderRadius: '50%' } : { border: `1.5px solid ${rank.color}66`, borderRadius: '50%' }}
                   />
-                </div>
-                {/* ELO rank level pip */}
-                <div style={{
-                  position: 'absolute', bottom: -2, right: -2, zIndex: 2,
-                  background: '#060608', border: `1px solid ${rank.color}60`,
-                  borderRadius: 10, padding: '1px 5px',
-                  fontSize: 8, fontWeight: 900, color: rank.color,
-                }}>
-                  {rank.level}
                 </div>
               </motion.button>
 

@@ -355,7 +355,7 @@ export default function LeaderboardPage() {
                 <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
                   <div style={{ fontSize: 9, color: '#9CA3AF', fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 2 }}>Ваше место</div>
                   <div style={{ fontSize: 13, fontWeight: 900, color: meCalibrating ? '#EAB308' : myTheme.color, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                    {meCalibrating ? <><Icon name="target" size={13} />Калибровка</> : meChallenger ? <><Icon name="crown" size={13} />Challenger</> : myTheme.label}
+                    {meCalibrating ? 'Калибровка' : meChallenger ? <><Icon name="crown" size={13} />Challenger</> : myTheme.label}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginTop: 3 }}>
                     {meCalibrating ? (

@@ -21,13 +21,31 @@ const CALIBRATION_COLOR = '#EAB308'
  */
 export function EloRing({ elo, size = 64, isChallenger = false, showLabel = true, calibrating = false }: EloRingProps) {
   const rank = isChallenger ? CHALLENGER_RANK : getEloRank(elo)
-  const color = calibrating ? CALIBRATION_COLOR : rank.color
-  const label = calibrating ? 'Калибровка' : rank.label
+  const { color, label } = rank
   // ?v= — cache-bust: у статики max-age 4ч, без смены URL клиенты
   // (Telegram webview) держат старую картинку после обновления набора
   const RANKS_V = 2
   const img = isChallenger ? `/ranks/challenger.jpg?v=${RANKS_V}` : `/ranks/${rank.level}.jpg?v=${RANKS_V}`
   const labelSize = size < 50 ? 8 : 9
+
+  // Во время калибровки — готовый значок «?» (тот же стиль кольца), без рамки ранга
+  if (calibrating) {
+    return (
+      <div className="flex flex-col items-center gap-1">
+        <img
+          src="/ranks/calibration.png?v=1"
+          width={size}
+          height={size}
+          alt="Калибровка"
+          draggable={false}
+          style={{ display: 'block', width: size, height: size, flexShrink: 0, userSelect: 'none', filter: `drop-shadow(0 0 ${Math.round(size * 0.16)}px ${CALIBRATION_COLOR}55)` }}
+        />
+        {showLabel && (
+          <span style={{ fontSize: labelSize, fontWeight: 700, color: CALIBRATION_COLOR, letterSpacing: '0.04em', textTransform: 'uppercase', opacity: 0.9, whiteSpace: 'nowrap' }}>Калибровка</span>
+        )}
+      </div>
+    )
+  }
 
   // Рамка: тонкое градиентное кольцо в цвет ранга + тёмная подложка
   const ringW = Math.max(1.5, Math.round(size * 0.04))
@@ -64,33 +82,22 @@ export function EloRing({ elo, size = 64, isChallenger = false, showLabel = true
             overflow: 'hidden',
           }}
         >
-          {calibrating ? (
-            <span style={{
-              fontSize: Math.round(size * 0.5),
-              fontWeight: 900,
-              color: CALIBRATION_COLOR,
-              lineHeight: 1,
-              textShadow: `0 0 ${Math.round(size * 0.18)}px ${CALIBRATION_COLOR}aa`,
+          <img
+            src={img}
+            alt={label}
+            width={imgSize}
+            height={imgSize}
+            draggable={false}
+            style={{
+              display: 'block',
+              width: imgSize,
+              height: imgSize,
+              objectFit: 'cover',
               userSelect: 'none',
-            }}>?</span>
-          ) : (
-            <img
-              src={img}
-              alt={label}
-              width={imgSize}
-              height={imgSize}
-              draggable={false}
-              style={{
-                display: 'block',
-                width: imgSize,
-                height: imgSize,
-                objectFit: 'cover',
-                userSelect: 'none',
-                WebkitMaskImage: feather,
-                maskImage: feather,
-              }}
-            />
-          )}
+              WebkitMaskImage: feather,
+              maskImage: feather,
+            }}
+          />
         </div>
       </div>
       {showLabel && (

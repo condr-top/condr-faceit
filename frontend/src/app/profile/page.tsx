@@ -454,8 +454,8 @@ export default function ProfilePage() {
                   <div style={{ fontSize: 9, color: '#6B7280', fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 3 }}>Ваш ранг</div>
                   {calibrating ? (
                     <>
-                      <div style={{ fontSize: 18, fontWeight: 900, color: accent, lineHeight: 1, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                        <Icon name="target" size={15} color={accent} />Калибровка
+                      <div style={{ fontSize: 18, fontWeight: 900, color: accent, lineHeight: 1 }}>
+                        Калибровка
                       </div>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginTop: 6 }}>
                         <span style={{ fontSize: 22, fontWeight: 900, color: '#fff', letterSpacing: '-0.8px', lineHeight: 1 }}>{user.matchesPlayed}<span style={{ fontSize: 14, color: '#6B7280' }}>/10</span></span>

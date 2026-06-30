@@ -159,9 +159,7 @@ export function CustomizationSection() {
           return (
             <motion.div key={p.key} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.03 * i }}
               style={{ borderRadius: 16, overflow: 'hidden', border: `1px solid ${eq ? col + '88' : 'rgba(255,255,255,0.08)'}`, background: '#0f0f15' }}>
-              <div style={{ height: 48, background: `${vis?.css ?? ''}, linear-gradient(#16171d,#16171d)`, display: 'flex', alignItems: 'center', paddingLeft: 12 }}>
-                <span style={{ fontSize: 11, fontWeight: 800, color: '#cbd5e1' }}>nickname · 1834</span>
-              </div>
+              <div style={{ height: 48, background: `${vis?.css ?? ''}, linear-gradient(#16171d,#16171d)` }} />
               <div style={{ padding: '10px 12px' }}>
                 <div style={{ fontSize: 13, fontWeight: 800, color: '#fff', marginBottom: 8 }}>{p.name}</div>
                 {eq ? (

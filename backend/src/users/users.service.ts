@@ -187,7 +187,7 @@ export class UsersService {
     return this.userRepo.save(user);
   }
 
-  async getBatch(ids: number[]): Promise<{ id: number; gameNickname: string; gameId: string; avatarUrl: string; elo: number; isVerified: boolean }[]> {
+  async getBatch(ids: number[]): Promise<any[]> {
     if (!ids.length) return [];
     const users = await this.userRepo.findBy({ id: In(ids) });
     return users.map((u) => ({
@@ -197,6 +197,8 @@ export class UsersService {
       avatarUrl: u.avatarUrl || '',
       elo: u.elo ?? 1000,
       isVerified: u.isVerified ?? false,
+      avatarFrame: u.avatarFrame ?? null,
+      title: u.title ?? null,
     }));
   }
 
@@ -308,6 +310,8 @@ export class UsersService {
       isAdmin: user.isAdmin,
       warns: user.warns ?? 0,
       region: user.region ?? null,
+      avatarFrame: user.avatarFrame ?? null,
+      title: user.title ?? null,
       friendStatus,
     };
   }
@@ -325,6 +329,9 @@ export class UsersService {
       elo: user.elo,
       coins: user.coins,
       notifPrefs: user.notifPrefs || {},
+      avatarFrame: user.avatarFrame ?? null,
+      ownedFrames: user.ownedFrames ?? [],
+      title: user.title ?? null,
       matchesPlayed: user.matchesPlayed,
       matchesWon: user.matchesWon,
       matchesLost: user.matchesLost,

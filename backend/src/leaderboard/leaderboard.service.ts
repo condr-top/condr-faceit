@@ -27,6 +27,8 @@ export class LeaderboardService {
       isPremium: u.isPremium,
       isVerified: u.isVerified,
       region: u.region ?? null,
+      avatarFrame: u.avatarFrame ?? null,
+      title: u.title ?? null,
     };
   }
 

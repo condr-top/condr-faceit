@@ -13,6 +13,7 @@ import { MatchCard } from '@/components/ui/MatchCard'
 import { getEloRank, getRankProgress, ELO_RANKS, CHALLENGER_RANK, qualifiesChallenger } from '@/lib/eloRank'
 import { Flag } from '@/components/ui/Flag'
 import { Icon, IconName } from '@/components/ui/Icon'
+import { getFrame, getTitle } from '@/lib/cosmetics'
 
 interface PublicProfile {
   id: number
@@ -36,6 +37,8 @@ interface PublicProfile {
   warns: number
   friendStatus: 'none' | 'friends' | 'pending_sent' | 'pending_received'
   region?: string | null
+  avatarFrame?: string | null
+  title?: string | null
 }
 
 // ── Skeleton loader ───────────────────────────────────────────────────────────
@@ -153,6 +156,8 @@ export default function PlayerPage() {
   const isChallenger = !calibrating && qualifiesChallenger(profile.elo, playerRank)
   const theme = isChallenger ? CHALLENGER_RANK : rank
   const accent = calibrating ? '#EAB308' : theme.color
+  const playerFrame = getFrame(profile.avatarFrame)
+  const playerTitle = getTitle(profile.title)
   const displayName = profile.gameNickname || profile.firstName
   const warns = profile.warns ?? 0
   const rankProg = Math.round(getRankProgress(profile.elo) * 100)
@@ -237,6 +242,10 @@ export default function PlayerPage() {
                   ><Icon name="search" size={22} /></div>
                 )}
               </div>
+              {playerFrame && (
+                <span aria-hidden className={playerFrame.animated ? 'cosmetic-frame-spin' : undefined}
+                  style={{ position: 'absolute', inset: -4, borderRadius: '50%', background: playerFrame.gradient, WebkitMask: 'radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 4px))', mask: 'radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 4px))', filter: `drop-shadow(0 0 8px ${playerFrame.glow})`, pointerEvents: 'none', zIndex: 3 }} />
+              )}
             </motion.div>
 
             {/* Name */}
@@ -252,6 +261,15 @@ export default function PlayerPage() {
               </h2>
               {profile.isVerified && <Icon name="verified" size={20} style={{ flexShrink: 0 }} />}
             </div>
+
+            {/* Титул */}
+            {playerTitle && (
+              <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
+                <span style={{ fontSize: 12, fontWeight: 900, color: playerTitle.color, background: playerTitle.bg, border: `1px solid ${playerTitle.color}55`, padding: '4px 13px', borderRadius: 20, letterSpacing: '0.03em', boxShadow: `0 0 16px ${playerTitle.color}33` }}>
+                  {playerTitle.name}
+                </span>
+              </div>
+            )}
 
             {/* Username / Game ID */}
             {(profile.username || profile.gameId) && (

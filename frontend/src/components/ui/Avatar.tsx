@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { getFrame } from '@/lib/cosmetics'
 
 interface AvatarProps {
   avatarUrl?: string | null
@@ -8,35 +9,26 @@ interface AvatarProps {
   size?: number
   className?: string
   style?: React.CSSProperties
+  /** Ключ декоративной рамки (косметика). Если задан — рисуется кольцо-рамка. */
+  frame?: string | null
 }
 
-export function Avatar({ avatarUrl, name, size = 32, className = '', style }: AvatarProps) {
+const RING = 'radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px))'
+
+export function Avatar({ avatarUrl, name, size = 32, className = '', style, frame }: AvatarProps) {
   const [error, setError] = useState(false)
-
-  // /uploads/... → проксируется через Next.js (работает для всех)
-  // http://... → внешняя ссылка (Telegram фото, может не грузиться)
-  const resolvedUrl = avatarUrl
-    ? avatarUrl.startsWith('/uploads')
-      ? avatarUrl  // используем как есть — Next.js проксирует на бэкенд
-      : avatarUrl  // внешняя ссылка (Telegram)
-    : null
-
+  const resolvedUrl = avatarUrl || null
   const initials = (name || '?')[0].toUpperCase()
-
   const baseStyle: React.CSSProperties = { width: size, height: size, borderRadius: '50%', ...style }
 
-  if (!resolvedUrl || error) {
-    return (
-      <div
-        className={`flex items-center justify-center font-bold text-white flex-shrink-0 ${className}`}
-        style={{ ...baseStyle, background: 'rgba(255,255,255,0.08)', fontSize: size * 0.4 }}
-      >
-        {initials}
-      </div>
-    )
-  }
-
-  return (
+  const inner = (!resolvedUrl || error) ? (
+    <div
+      className={`flex items-center justify-center font-bold text-white flex-shrink-0 ${className}`}
+      style={{ ...baseStyle, background: 'rgba(255,255,255,0.08)', fontSize: size * 0.4 }}
+    >
+      {initials}
+    </div>
+  ) : (
     <img
       src={resolvedUrl}
       alt={name}
@@ -44,5 +36,25 @@ export function Avatar({ avatarUrl, name, size = 32, className = '', style }: Av
       className={`object-cover flex-shrink-0 ${className}`}
       style={{ ...baseStyle }}
     />
+  )
+
+  const f = getFrame(frame)
+  if (!f) return inner // без рамки — поведение как раньше (нулевая регрессия)
+
+  return (
+    <span style={{ position: 'relative', display: 'inline-flex', flexShrink: 0, lineHeight: 0 }}>
+      {inner}
+      <span
+        aria-hidden
+        className={f.animated ? 'cosmetic-frame-spin' : undefined}
+        style={{
+          position: 'absolute', inset: -3, borderRadius: '50%',
+          background: f.gradient,
+          WebkitMask: RING, mask: RING,
+          filter: `drop-shadow(0 0 5px ${f.glow})`,
+          pointerEvents: 'none',
+        }}
+      />
+    </span>
   )
 }

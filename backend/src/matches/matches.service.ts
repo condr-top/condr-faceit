@@ -1422,6 +1422,8 @@ export class MatchesService {
         userId: uid,
         nickname: u?.gameNickname || u?.firstName || `Игрок ${uid}`,
         avatarUrl: u?.avatarUrl ?? null,
+        avatarFrame: u?.avatarFrame ?? null,
+        title: u?.title ?? null,
         elo: u?.elo ?? 1000,
         region: u?.region ?? null,
         isVerified: u?.isVerified ?? false,

@@ -18,6 +18,7 @@ import { Flag } from '@/components/ui/Flag'
 import { RegionPicker } from '@/components/ui/RegionPicker'
 import { StreamerSettings } from '@/components/streamer/StreamerSettings'
 import { NotifSettings } from '@/components/settings/NotifSettings'
+import { getFrame, getTitle } from '@/lib/cosmetics'
 import { Icon, IconName } from '@/components/ui/Icon'
 import { useUiStore } from '@/store/uiStore'
 
@@ -330,6 +331,8 @@ export default function ProfilePage() {
   const isChallenger = !calibrating && qualifiesChallenger(user.elo, myRank)
   const theme = isChallenger ? CHALLENGER_RANK : rank
   const accent = calibrating ? '#EAB308' : theme.color
+  const profileFrame = getFrame(user.avatarFrame)
+  const profileTitle = getTitle(user.title)
   const rankProg = Math.round(getRankProgress(user.elo) * 100)
   const nextRank = ELO_RANKS.find(r => r.min > user.elo) || null
   const eloToNext = nextRank ? nextRank.min - user.elo : 0
@@ -404,6 +407,10 @@ export default function ProfilePage() {
                         : <Icon name="camera" size={24} color="#fff" />}
                     </div>
                   </div>
+                  {profileFrame && (
+                    <span aria-hidden className={profileFrame.animated ? 'cosmetic-frame-spin' : undefined}
+                      style={{ position: 'absolute', inset: -4, borderRadius: '50%', background: profileFrame.gradient, WebkitMask: 'radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 4px))', mask: 'radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 4px))', filter: `drop-shadow(0 0 8px ${profileFrame.glow})`, pointerEvents: 'none', zIndex: 3 }} />
+                  )}
                 </div>
                 <input type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={handleAvatarChange} disabled={uploadingAvatar} />
               </label>
@@ -421,6 +428,15 @@ export default function ProfilePage() {
                 </h1>
                 {user.isVerified && <Icon name="verified" size={20} style={{ flexShrink: 0 }} />}
               </div>
+
+              {/* Титул */}
+              {profileTitle && (
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
+                  <span style={{ fontSize: 12, fontWeight: 900, color: profileTitle.color, background: profileTitle.bg, border: `1px solid ${profileTitle.color}55`, padding: '4px 13px', borderRadius: 20, letterSpacing: '0.03em', boxShadow: `0 0 16px ${profileTitle.color}33` }}>
+                    {profileTitle.name}
+                  </span>
+                </div>
+              )}
 
               {/* username + ADM */}
               {(user.username || user.isAdmin) && (

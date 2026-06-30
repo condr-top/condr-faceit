@@ -23,6 +23,7 @@ interface SPlayer {
   kills: number; deaths: number; assists: number
   kdMatch: number; ratingMatch: number; eloChange: number
   calibration?: boolean
+  avatarFrame?: string | null
 }
 interface Summary {
   id: number; map: string | null; winnerTeam: string
@@ -52,7 +53,7 @@ function PlayerRow({ p, accent, isMvp, delay, onClick }: { p: SPlayer; accent: s
     >
       <EloRing elo={p.elo} size={32} showLabel={false} calibrating={!!p.calibration} />
       <div style={{ position: 'relative', flexShrink: 0 }}>
-        <Avatar avatarUrl={p.avatarUrl} name={p.nickname} size={34} style={{ borderRadius: '50%', border: `1.5px solid ${accent}40` }} />
+        <Avatar avatarUrl={p.avatarUrl} name={p.nickname} size={34} frame={p.avatarFrame} style={{ borderRadius: '50%', border: `1.5px solid ${accent}40` }} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>

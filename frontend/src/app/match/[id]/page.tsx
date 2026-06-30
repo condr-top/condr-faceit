@@ -41,7 +41,7 @@ export default function MatchPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
-  const [players, setPlayers] = useState<Record<number, { gameNickname: string; gameId: string; avatarUrl?: string; elo?: number; isVerified?: boolean }>>({})
+  const [players, setPlayers] = useState<Record<number, { gameNickname: string; gameId: string; avatarUrl?: string; elo?: number; isVerified?: boolean; avatarFrame?: string | null }>>({})
   const [reportTarget, setReportTarget] = useState<{ id: number; name: string } | null>(null)
   const [lobbyLinkInput, setLobbyLinkInput] = useState('')
   const [lobbyLinkSaving, setLobbyLinkSaving] = useState(false)
@@ -60,8 +60,8 @@ export default function MatchPage() {
     api.get('/users/batch', { params: { ids: ids.join(',') } })
       .then((r) => {
         if (!Array.isArray(r.data) || !r.data.length) return
-        const map: Record<number, { gameNickname: string; gameId: string; avatarUrl?: string; elo?: number; isVerified?: boolean }> = {}
-        r.data.forEach((p: any) => { map[p.id] = { gameNickname: p.gameNickname, gameId: p.gameId, avatarUrl: p.avatarUrl, elo: p.elo, isVerified: p.isVerified } })
+        const map: Record<number, { gameNickname: string; gameId: string; avatarUrl?: string; elo?: number; isVerified?: boolean; avatarFrame?: string | null }> = {}
+        r.data.forEach((p: any) => { map[p.id] = { gameNickname: p.gameNickname, gameId: p.gameId, avatarUrl: p.avatarUrl, elo: p.elo, isVerified: p.isVerified, avatarFrame: p.avatarFrame } })
         setPlayers((prev) => ({ ...prev, ...map }))
       })
       .catch(() => {})
@@ -507,6 +507,7 @@ export default function MatchPage() {
                               avatarUrl={players[pid]?.avatarUrl}
                               name={players[pid]?.gameNickname || '?'}
                               size={39}
+                              frame={players[pid]?.avatarFrame}
                               style={{ borderRadius: '50%' }}
                             />
                           </div>

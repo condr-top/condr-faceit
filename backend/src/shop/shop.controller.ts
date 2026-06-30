@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, ParseIntPipe, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, ParseIntPipe, UseGuards, Request } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ShopService } from './shop.service';
 
@@ -51,6 +51,32 @@ export class ShopController {
   @Post('service/condr-tag')
   buyCondrTag(@Request() req: any) {
     return this.shopService.buyCondrTag(req.user.id);
+  }
+
+  // ── Косметика ──
+  @Get('cosmetics')
+  getCosmetics(@Request() req: any) {
+    return this.shopService.getCosmetics(req.user.id);
+  }
+
+  @Post('frame/buy')
+  buyFrame(@Request() req: any, @Body('key') key: string) {
+    return this.shopService.buyFrame(req.user.id, key);
+  }
+
+  @Post('frame/equip')
+  equipFrame(@Request() req: any, @Body('key') key: string | null) {
+    return this.shopService.equipFrame(req.user.id, key ?? null);
+  }
+
+  @Post('title/buy')
+  buyTitle(@Request() req: any, @Body('key') key: string) {
+    return this.shopService.buyTitle(req.user.id, key);
+  }
+
+  @Post('title/clear')
+  clearTitle(@Request() req: any) {
+    return this.shopService.clearTitle(req.user.id);
   }
 
   @Post(':id/buy')

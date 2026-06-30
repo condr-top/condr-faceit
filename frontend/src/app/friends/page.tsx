@@ -27,6 +27,7 @@ interface Player {
   matchesPlayed: number
   winRate?: number
   online?: boolean
+  avatarFrame?: string | null
 }
 
 type PartyLite = { maxSize: number; members: { id: number }[]; invites: { id: number }[] } | null
@@ -87,7 +88,7 @@ function FriendCard({ p, delay = 0, actions, onClick }: { p: Player; delay?: num
 
         {/* avatar */}
         <button onClick={onClick} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, position: 'relative', flexShrink: 0 }}>
-          <Avatar avatarUrl={p.avatarUrl} name={p.gameNickname || p.firstName} size={48} style={{ border: `2px solid ${rank.color}40` }} />
+          <Avatar avatarUrl={p.avatarUrl} name={p.gameNickname || p.firstName} size={48} frame={p.avatarFrame} style={{ border: `2px solid ${rank.color}40` }} />
           {/* online dot */}
           {p.online !== undefined && (
             <div style={{ position: 'absolute', right: 0, bottom: 0, width: 13, height: 13, borderRadius: '50%', background: p.online ? GREEN : '#4B5563', border: '2.5px solid #0c0c11', boxShadow: p.online ? `0 0 6px ${GREEN}` : 'none' }} />

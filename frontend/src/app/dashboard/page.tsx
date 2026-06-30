@@ -326,6 +326,7 @@ export default function DashboardPage() {
                     avatarUrl={user.avatarUrl}
                     name={user.gameNickname || user.firstName}
                     size={56}
+                    frame={user.avatarFrame}
                     style={{ border: `2px solid ${rank.color}40`, borderRadius: '50%' }}
                   />
                 </div>

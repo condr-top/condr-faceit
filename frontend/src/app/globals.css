@@ -147,3 +147,7 @@ body {
     @apply text-xs font-bold px-2 py-0.5 rounded;
   }
 }
+
+/* Косметика: вращающееся кольцо для анимированных рамок (frame=champion) */
+@keyframes cosmetic-frame-spin { to { transform: rotate(360deg); } }
+.cosmetic-frame-spin { animation: cosmetic-frame-spin 6s linear infinite; will-change: transform; }

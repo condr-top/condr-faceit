@@ -5,6 +5,7 @@ import { ShopItem } from './entities/shop-item.entity';
 import { UserInventory } from './entities/user-inventory.entity';
 import { User } from '../users/entities/user.entity';
 import { tgPost } from '../common/telegram';
+import { FRAMES, TITLES, FRAME_KEYS, TITLE_KEYS } from './cosmetics';
 
 // Цены услуг в CONDR COIN (единственный источник правды — меняй здесь)
 export const SERVICE_PRICES = {
@@ -182,6 +183,72 @@ export class ShopService {
       tgPost('sendMessage', { chat_id: chatId, text, parse_mode: 'HTML' }).catch((e) => this.logger.warn(`condr tag notify: ${e}`));
     }
     return { ok: true, coins: user.coins, message: 'Заявка отправлена. Администратор выдаст тэг [CONDR] в игре' };
+  }
+
+  // ───────────────────────── Косметика ─────────────────────────
+
+  /** Каталог + что у игрока куплено/надето. */
+  async getCosmetics(userId: number) {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    return {
+      frames: FRAMES,
+      titles: TITLES,
+      ownedFrames: user.ownedFrames ?? [],
+      equippedFrame: user.avatarFrame ?? null,
+      title: user.title ?? null,
+      coins: user.coins,
+    };
+  }
+
+  /** Купить рамку (добавляется в коллекцию и сразу надевается). */
+  async buyFrame(userId: number, key: string): Promise<any> {
+    if (!FRAME_KEYS.includes(key)) throw new BadRequestException('Неизвестная рамка');
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    const owned = user.ownedFrames ?? [];
+    if (!owned.includes(key)) {
+      const price = FRAMES.find((f) => f.key === key)!.price;
+      if ((user.coins ?? 0) < price) throw new BadRequestException('Недостаточно монет');
+      user.coins -= price;
+      user.ownedFrames = [...owned, key];
+    }
+    user.avatarFrame = key; // сразу надеваем
+    await this.userRepo.save(user);
+    return { ok: true, coins: user.coins, ownedFrames: user.ownedFrames, equippedFrame: user.avatarFrame };
+  }
+
+  /** Надеть/снять рамку из уже купленных (null = снять). */
+  async equipFrame(userId: number, key: string | null): Promise<any> {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    if (key && !(user.ownedFrames ?? []).includes(key)) throw new BadRequestException('Рамка не куплена');
+    user.avatarFrame = key || null;
+    await this.userRepo.save(user);
+    return { ok: true, equippedFrame: user.avatarFrame };
+  }
+
+  /** Купить титул. Один за раз — покупка нового сбрасывает старый. */
+  async buyTitle(userId: number, key: string): Promise<any> {
+    if (!TITLE_KEYS.includes(key)) throw new BadRequestException('Неизвестный титул');
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    if (user.title === key) throw new BadRequestException('Этот титул уже активен');
+    const price = TITLES.find((t) => t.key === key)!.price;
+    if ((user.coins ?? 0) < price) throw new BadRequestException('Недостаточно монет');
+    user.coins -= price;
+    user.title = key; // перезаписываем старый
+    await this.userRepo.save(user);
+    return { ok: true, coins: user.coins, title: user.title };
+  }
+
+  /** Снять титул. */
+  async clearTitle(userId: number): Promise<any> {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    user.title = null;
+    await this.userRepo.save(user);
+    return { ok: true, title: null };
   }
 
   async getUserInventory(userId: number) {

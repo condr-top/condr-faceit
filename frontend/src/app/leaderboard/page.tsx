@@ -19,6 +19,7 @@ interface Entry {
   gameNickname: string | null; username: string | null; firstName: string
   avatarUrl: string | null; elo: number; matchesPlayed: number
   winRate: number; isPremium: boolean; isVerified: boolean; region?: string | null
+  avatarFrame?: string | null; title?: string | null
 }
 
 const CHALL = '#E8092E'
@@ -195,7 +196,7 @@ function PlayerRow({ p, delay, isMe, isChallenger }: { p: Entry; delay: number; 
 
         {/* Avatar */}
         <div style={{ position: 'relative', flexShrink: 0 }}>
-          <Avatar avatarUrl={p.avatarUrl} name={p.gameNickname || p.firstName} size={40} style={{ border: `1.5px solid ${accent}33`, borderRadius: '50%' }} />
+          <Avatar avatarUrl={p.avatarUrl} name={p.gameNickname || p.firstName} size={40} frame={p.avatarFrame} style={{ border: `1.5px solid ${accent}33`, borderRadius: '50%' }} />
         </div>
 
         {/* Info */}

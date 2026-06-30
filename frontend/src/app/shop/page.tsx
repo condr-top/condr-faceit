@@ -10,6 +10,7 @@ import { useAuthStore } from '@/store/authStore'
 import { RequireRegistration } from '@/components/providers/RequireRegistration'
 import { CoinPurchaseButton } from '@/components/coins/CoinPurchaseButton'
 import { Icon, IconName } from '@/components/ui/Icon'
+import { CustomizationSection } from '@/components/shop/CustomizationSection'
 
 interface ShopItem {
   id: number; title: string; description: string; type: string
@@ -25,7 +26,6 @@ const TYPE_META: Record<string, { icon: IconName; color: string }> = {
 }
 
 const SECTIONS: { key: string; label: string; sub: string; color: string; icon: IconName; types: string[]; comingSoon?: boolean }[] = [
-  { key: 'custom',   label: 'Кастомизация',  sub: 'Рамки, цвета, оформление',  color: '#A855F7', icon: 'palette',  types: ['avatar_frame', 'nickname_color'] },
   { key: 'cases',    label: 'Кейсы',         sub: 'Открывай и забирай награды', color: '#60A5FA', icon: 'gift',     types: [], comingSoon: true },
 ]
 
@@ -302,6 +302,9 @@ export default function ShopPage() {
             <ServiceTile key={svc.key} svc={svc} delay={0.04 * i} onOpen={() => setSvcDetail(svc)} />
           ))}
         </div>
+
+        {/* Кастомизация — рамки аватара и титулы */}
+        <CustomizationSection />
 
         {/* Sections */}
         {SECTIONS.map((s, si) => {

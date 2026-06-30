@@ -100,6 +100,19 @@ export class User {
   @Column({ name: 'condr_tag_requested', default: false })
   condrTagRequested: boolean;
 
+  // ── Косметика (видна другим игрокам) ──
+  // Активная декоративная рамка аватара (ключ из cosmetics.FRAMES) или null
+  @Column({ name: 'avatar_frame', nullable: true })
+  avatarFrame: string;
+
+  // Купленные рамки (ключи) — можно переключаться между ними бесплатно
+  @Column({ name: 'owned_frames', type: 'jsonb', default: [] })
+  ownedFrames: string[];
+
+  // Текущий титул (ключ из cosmetics.TITLES). Один за раз — покупка нового сбрасывает старый
+  @Column({ name: 'title', nullable: true })
+  title: string;
+
   // Токен публичного OBS-виджета для стримеров (ссылка вида /obs/<token>)
   @Index()
   @Column({ name: 'stream_token', nullable: true })

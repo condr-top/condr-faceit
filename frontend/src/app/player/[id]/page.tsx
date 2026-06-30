@@ -224,7 +224,11 @@ export default function PlayerPage() {
               onClick={() => profile.avatarUrl && setShowAvatar(true)}
               style={{ position: 'relative', width: 112, height: 112, cursor: profile.avatarUrl ? 'pointer' : 'default' }}
             >
-              <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', overflow: 'hidden', background: '#0a0a0e', border: `2px solid ${playerFrame ? 'rgba(255,255,255,0.12)' : theme.color + '66'}`, boxShadow: playerFrame ? 'none' : `0 0 18px ${theme.color}33` }}>
+              {playerFrame && (
+                <span aria-hidden className={playerFrame.animated ? 'cosmetic-frame-spin' : undefined}
+                  style={{ position: 'absolute', inset: -7, borderRadius: '50%', background: playerFrame.gradient, filter: `drop-shadow(0 0 16px ${playerFrame.glow})`, zIndex: 0 }} />
+              )}
+              <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', overflow: 'hidden', background: '#0a0a0e', border: `2px solid ${playerFrame ? '#0a0a0e' : theme.color + '66'}`, boxShadow: playerFrame ? 'none' : `0 0 18px ${theme.color}33`, zIndex: 1 }}>
                 <Avatar avatarUrl={profile.avatarUrl} name={displayName} size={112} style={{ width: '100%', height: '100%', borderRadius: '50%' }} />
                 {profile.avatarUrl && (
                   <div style={{
@@ -237,10 +241,6 @@ export default function PlayerPage() {
                   ><Icon name="search" size={22} /></div>
                 )}
               </div>
-              {playerFrame && (
-                <span aria-hidden className={playerFrame.animated ? 'cosmetic-frame-spin' : undefined}
-                  style={{ position: 'absolute', inset: -9, borderRadius: '50%', background: playerFrame.gradient, WebkitMask: 'radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 7px))', mask: 'radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 7px))', filter: `drop-shadow(0 0 14px ${playerFrame.glow})`, pointerEvents: 'none', zIndex: 3 }} />
-              )}
             </motion.div>
 
             {/* Name */}

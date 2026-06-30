@@ -385,8 +385,13 @@ export default function ProfilePage() {
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
               <label style={{ position: 'relative', cursor: 'pointer' }}>
                 <div style={{ position: 'relative', width: 112, height: 112 }}>
-                  {/* По-дефолту — тонкая обводка; косметическая рамка рисуется поверх */}
-                  <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', overflow: 'hidden', background: '#0a0a0e', border: `2px solid ${profileFrame ? 'rgba(255,255,255,0.12)' : theme.color + '66'}`, boxShadow: profileFrame ? 'none' : `0 0 18px ${theme.color}33` }}>
+                  {/* Косметическая рамка — чёткий круг-градиент СЗАДИ (без маски) */}
+                  {profileFrame && (
+                    <span aria-hidden className={profileFrame.animated ? 'cosmetic-frame-spin' : undefined}
+                      style={{ position: 'absolute', inset: -7, borderRadius: '50%', background: profileFrame.gradient, filter: `drop-shadow(0 0 16px ${profileFrame.glow})`, zIndex: 0 }} />
+                  )}
+                  {/* Аватар + тонкий тёмный/ранговый разделитель поверх рамки */}
+                  <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', overflow: 'hidden', background: '#0a0a0e', border: `2px solid ${profileFrame ? '#0a0a0e' : theme.color + '66'}`, boxShadow: profileFrame ? 'none' : `0 0 18px ${theme.color}33`, zIndex: 1 }}>
                     <Avatar
                       avatarUrl={user.avatarUrl}
                       name={user.gameNickname || user.firstName}
@@ -403,10 +408,6 @@ export default function ProfilePage() {
                         : <Icon name="camera" size={24} color="#fff" />}
                     </div>
                   </div>
-                  {profileFrame && (
-                    <span aria-hidden className={profileFrame.animated ? 'cosmetic-frame-spin' : undefined}
-                      style={{ position: 'absolute', inset: -9, borderRadius: '50%', background: profileFrame.gradient, WebkitMask: 'radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 7px))', mask: 'radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 7px))', filter: `drop-shadow(0 0 14px ${profileFrame.glow})`, pointerEvents: 'none', zIndex: 3 }} />
-                  )}
                 </div>
                 <input type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={handleAvatarChange} disabled={uploadingAvatar} />
               </label>

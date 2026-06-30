@@ -17,7 +17,16 @@ export function Avatar({ avatarUrl, name, size = 32, className = '', style, fram
   const [error, setError] = useState(false)
   const resolvedUrl = avatarUrl || null
   const initials = (name || '?')[0].toUpperCase()
-  const baseStyle: React.CSSProperties = { width: size, height: size, borderRadius: '50%', ...style }
+  const f = getFrame(frame)
+
+  // С рамкой убираем «родную» обводку/тень аватара со страницы — иначе двойное кольцо.
+  // Рамка сама даёт кольцо + тёмный разделитель.
+  const cleanStyle = (() => {
+    if (!f || !style) return style
+    const { border, boxShadow, outline, ...rest } = style as any
+    return rest as React.CSSProperties
+  })()
+  const baseStyle: React.CSSProperties = { width: size, height: size, borderRadius: '50%', ...cleanStyle }
 
   const inner = (!resolvedUrl || error) ? (
     <div
@@ -36,22 +45,21 @@ export function Avatar({ avatarUrl, name, size = 32, className = '', style, fram
     />
   )
 
-  const f = getFrame(frame)
   if (!f) return inner // без рамки — поведение как раньше (нулевая регрессия)
 
   // Чёткое кольцо-рамка: полный круг-градиент СЗАДИ, аватар сверху перекрывает
   // центр (без CSS-маски → нет «пиксельных» краёв). Толщина масштабируется.
-  const band = Math.max(2, Math.round(size * 0.06))
+  const band = Math.max(3, Math.round(size * 0.1))
   const outer = size + band * 2
   return (
     <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: outer, height: outer, flexShrink: 0, lineHeight: 0 }}>
       <span
         aria-hidden
         className={f.animated ? 'cosmetic-frame-spin' : undefined}
-        style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: f.gradient, filter: `drop-shadow(0 0 ${Math.max(4, Math.round(size * 0.12))}px ${f.glow})` }}
+        style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: f.gradient, filter: `drop-shadow(0 0 ${Math.max(5, Math.round(size * 0.14))}px ${f.glow})` }}
       />
       {/* тонкий тёмный разделитель между аватаром и кольцом */}
-      <span style={{ position: 'relative', zIndex: 1, display: 'inline-flex', borderRadius: '50%', boxShadow: '0 0 0 1.5px #0a0a0e' }}>{inner}</span>
+      <span style={{ position: 'relative', zIndex: 1, display: 'inline-flex', borderRadius: '50%', boxShadow: '0 0 0 2px #0a0a0e' }}>{inner}</span>
     </span>
   )
 }

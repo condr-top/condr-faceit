@@ -388,7 +388,7 @@ export default function ProfilePage() {
                   {/* Косметическая рамка — чёткий круг-градиент СЗАДИ (без маски) */}
                   {profileFrame && (
                     <span aria-hidden className={profileFrame.animated ? 'cosmetic-frame-spin' : undefined}
-                      style={{ position: 'absolute', inset: -7, borderRadius: '50%', background: profileFrame.gradient, filter: `drop-shadow(0 0 16px ${profileFrame.glow})`, zIndex: 0 }} />
+                      style={{ position: 'absolute', inset: -11, borderRadius: '50%', background: profileFrame.gradient, filter: `drop-shadow(0 0 18px ${profileFrame.glow})`, zIndex: 0 }} />
                   )}
                   {/* Аватар + тонкий тёмный/ранговый разделитель поверх рамки */}
                   <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', overflow: 'hidden', background: '#0a0a0e', border: `2px solid ${profileFrame ? '#0a0a0e' : theme.color + '66'}`, boxShadow: profileFrame ? 'none' : `0 0 18px ${theme.color}33`, zIndex: 1 }}>

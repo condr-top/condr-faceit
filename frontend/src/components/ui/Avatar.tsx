@@ -13,7 +13,7 @@ interface AvatarProps {
   frame?: string | null
 }
 
-const RING = 'radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px))'
+const ringMask = (band: number) => `radial-gradient(farthest-side, transparent calc(100% - ${band}px), #000 calc(100% - ${band}px))`
 
 export function Avatar({ avatarUrl, name, size = 32, className = '', style, frame }: AvatarProps) {
   const [error, setError] = useState(false)
@@ -41,6 +41,9 @@ export function Avatar({ avatarUrl, name, size = 32, className = '', style, fram
   const f = getFrame(frame)
   if (!f) return inner // без рамки — поведение как раньше (нулевая регрессия)
 
+  // Толщина рамки и свечение масштабируются под размер аватара
+  const band = Math.max(2.5, Math.round(size * 0.07))
+  const gap = Math.max(1, Math.round(size * 0.02)) // зазор между аватаром и рамкой
   return (
     <span style={{ position: 'relative', display: 'inline-flex', flexShrink: 0, lineHeight: 0 }}>
       {inner}
@@ -48,10 +51,10 @@ export function Avatar({ avatarUrl, name, size = 32, className = '', style, fram
         aria-hidden
         className={f.animated ? 'cosmetic-frame-spin' : undefined}
         style={{
-          position: 'absolute', inset: -3, borderRadius: '50%',
+          position: 'absolute', inset: -(band + gap), borderRadius: '50%',
           background: f.gradient,
-          WebkitMask: RING, mask: RING,
-          filter: `drop-shadow(0 0 5px ${f.glow})`,
+          WebkitMask: ringMask(band), mask: ringMask(band),
+          filter: `drop-shadow(0 0 ${Math.max(4, Math.round(size * 0.13))}px ${f.glow})`,
           pointerEvents: 'none',
         }}
       />

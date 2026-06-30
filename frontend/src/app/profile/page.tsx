@@ -385,17 +385,13 @@ export default function ProfilePage() {
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
               <label style={{ position: 'relative', cursor: 'pointer' }}>
                 <div style={{ position: 'relative', width: 112, height: 112 }}>
-                  <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 9, repeat: Infinity, ease: 'linear' }}
-                    style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: `conic-gradient(from 0deg, ${theme.color}, ${theme.color}1f, ${theme.color}, ${theme.color}1f, ${theme.color})`, boxShadow: `0 0 22px ${theme.color}44` }}
-                  />
-                  <div style={{ position: 'absolute', inset: 4, borderRadius: '50%', overflow: 'hidden', background: '#0a0a0e' }}>
+                  {/* По-дефолту — тонкая обводка; косметическая рамка рисуется поверх */}
+                  <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', overflow: 'hidden', background: '#0a0a0e', border: `2px solid ${profileFrame ? 'rgba(255,255,255,0.12)' : theme.color + '66'}`, boxShadow: profileFrame ? 'none' : `0 0 18px ${theme.color}33` }}>
                     <Avatar
                       avatarUrl={user.avatarUrl}
                       name={user.gameNickname || user.firstName}
-                      size={104}
-                      style={{ borderRadius: '50%' }}
+                      size={112}
+                      style={{ width: '100%', height: '100%', borderRadius: '50%' }}
                     />
                     <div style={{
                       position: 'absolute', inset: 0, borderRadius: '50%',
@@ -409,7 +405,7 @@ export default function ProfilePage() {
                   </div>
                   {profileFrame && (
                     <span aria-hidden className={profileFrame.animated ? 'cosmetic-frame-spin' : undefined}
-                      style={{ position: 'absolute', inset: -4, borderRadius: '50%', background: profileFrame.gradient, WebkitMask: 'radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 4px))', mask: 'radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 4px))', filter: `drop-shadow(0 0 8px ${profileFrame.glow})`, pointerEvents: 'none', zIndex: 3 }} />
+                      style={{ position: 'absolute', inset: -9, borderRadius: '50%', background: profileFrame.gradient, WebkitMask: 'radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 7px))', mask: 'radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 7px))', filter: `drop-shadow(0 0 14px ${profileFrame.glow})`, pointerEvents: 'none', zIndex: 3 }} />
                   )}
                 </div>
                 <input type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={handleAvatarChange} disabled={uploadingAvatar} />

@@ -311,23 +311,14 @@ export default function DashboardPage() {
                 onClick={() => router.push('/profile')}
                 style={{ position: 'relative', background: 'none', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0 }}
               >
-                {/* Animated rank-color ring */}
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
-                  style={{
-                    position: 'absolute', inset: -2, borderRadius: '50%',
-                    background: `conic-gradient(${rank.color}, transparent 60%, ${rank.color})`,
-                    opacity: 0.7,
-                  }}
-                />
+                {/* По-дефолту — тонкая обводка; косметическая рамка (frame) рисуется поверх */}
                 <div style={{ position: 'relative', zIndex: 1 }}>
                   <Avatar
                     avatarUrl={user.avatarUrl}
                     name={user.gameNickname || user.firstName}
                     size={56}
                     frame={user.avatarFrame}
-                    style={{ border: `2px solid ${rank.color}40`, borderRadius: '50%' }}
+                    style={{ border: `1.5px solid ${user.avatarFrame ? 'rgba(255,255,255,0.12)' : rank.color + '66'}`, borderRadius: '50%' }}
                   />
                 </div>
                 {/* ELO rank level pip */}

@@ -454,7 +454,7 @@ export default function ProfilePage() {
                   <div style={{ fontSize: 9, color: '#6B7280', fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 3 }}>Ваш ранг</div>
                   {calibrating ? (
                     <>
-                      <div style={{ fontSize: 18, fontWeight: 900, color: accent, lineHeight: 1 }}>
+                      <div style={{ fontSize: 18, fontWeight: 900, color: accent, lineHeight: 1, marginTop: 7 }}>
                         Калибровка
                       </div>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginTop: 6 }}>

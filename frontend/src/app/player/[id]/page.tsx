@@ -447,8 +447,8 @@ export default function PlayerPage() {
           )
         })()}
 
-        {/* ── ELO CHART ── */}
-        <EloChart userId={profile.id} currentElo={profile.elo} />
+        {/* ── ELO CHART (скрыт на калибровке — покажется после присвоения ранга) ── */}
+        {!calibrating && <EloChart userId={profile.id} currentElo={profile.elo} />}
 
         {/* ── RECENT MATCHES ── */}
         {recentMatches.length > 0 && (

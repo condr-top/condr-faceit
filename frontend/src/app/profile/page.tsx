@@ -661,8 +661,8 @@ export default function ProfilePage() {
             )
           })()}
 
-          {/* ── ELO CHART ── */}
-          <EloChart currentElo={user.elo} />
+          {/* ── ELO CHART (скрыт на калибровке — покажется после присвоения ранга) ── */}
+          {!calibrating && <EloChart currentElo={user.elo} />}
           </>)}
 
           {/* ── RECENT MATCHES ── */}

@@ -198,7 +198,8 @@ export class CoinsService implements OnApplicationBootstrap {
   private async sendWelcome(chatId: number | undefined, chatType?: string): Promise<void> {
     if (!chatId) return;
     const appUrl = (process.env.FRONTEND_URL || process.env.PUBLIC_URL || '').replace(/\/$/, '');
-    const photo = `${appUrl}/welcome.png`;
+    // ?v — обязателен: Telegram кэширует фото по URL, при смене баннера бампаем версию
+    const photo = `${appUrl}/welcome.png?v=2`;
 
     const caption =
       `<b>CONDR FACEIT</b> ⚔️\n` +

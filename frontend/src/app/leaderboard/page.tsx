@@ -46,6 +46,7 @@ function PodiumCard({ p, pos, delay, isChallenger }: { p: Entry; pos: 1 | 2 | 3;
   const { user } = useAuthStore()
   const isMe = p.id === user?.id
   const m = MEDALS[pos]
+  const calibrating = (p.matchesPlayed ?? 0) < 10
   const theme = isChallenger ? CHALLENGER_RANK : getEloRank(p.elo)
 
   return (
@@ -81,7 +82,7 @@ function PodiumCard({ p, pos, delay, isChallenger }: { p: Entry; pos: 1 | 2 | 3;
         </motion.div>
         {/* Rank orb badge — иконка ранга */}
         <div style={{ position: 'absolute', bottom: -5, right: -7, filter: `drop-shadow(0 0 6px ${theme.color}88)` }}>
-          <EloRing elo={p.elo} size={26} isChallenger={isChallenger} showLabel={false} />
+          <EloRing elo={p.elo} size={26} isChallenger={isChallenger} showLabel={false} calibrating={calibrating} />
         </div>
         {isMe && (
           <div style={{ position: 'absolute', top: -2, left: -4, zIndex: 2, background: CHALL, borderRadius: '50%', width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, color: '#fff', fontWeight: 900 }}>я</div>
@@ -96,8 +97,8 @@ function PodiumCard({ p, pos, delay, isChallenger }: { p: Entry; pos: 1 | 2 | 3;
       </div>
 
       {/* ELO */}
-      <div style={{ fontSize: pos === 1 ? 15 : 13, fontWeight: 900, color: m.color, marginBottom: 6, letterSpacing: '-0.5px', textShadow: isChallenger ? `0 0 10px ${CHALL}88` : 'none' }}>
-        {p.elo.toLocaleString()}
+      <div style={{ fontSize: pos === 1 ? 15 : 13, fontWeight: 900, color: calibrating ? '#EAB308' : m.color, marginBottom: 6, letterSpacing: '-0.5px', textShadow: isChallenger ? `0 0 10px ${CHALL}88` : 'none' }}>
+        {calibrating ? `${p.matchesPlayed}/10` : p.elo.toLocaleString()}
       </div>
 
       {/* Platform */}
@@ -127,6 +128,7 @@ function PlayerRow({ p, delay, isMe, isChallenger }: { p: Entry; delay: number; 
   const cardRef = useRef<HTMLDivElement>(null)
   const shineRef = useRef<HTMLDivElement>(null)
   const rank = getEloRank(p.elo)
+  const calibrating = (p.matchesPlayed ?? 0) < 10
   const accent = isChallenger ? CHALL : (isMe ? CHALL : rank.color)
 
   const track = (cx: number, cy: number) => {
@@ -188,7 +190,7 @@ function PlayerRow({ p, delay, isMe, isChallenger }: { p: Entry; delay: number; 
 
         {/* Rank orb */}
         <div style={{ flexShrink: 0 }}>
-          <EloRing elo={p.elo} size={36} isChallenger={isChallenger} showLabel={false} />
+          <EloRing elo={p.elo} size={36} isChallenger={isChallenger} showLabel={false} calibrating={calibrating} />
         </div>
 
         {/* Avatar */}
@@ -229,10 +231,10 @@ function PlayerRow({ p, delay, isMe, isChallenger }: { p: Entry; delay: number; 
 
         {/* ELO — фиксированная ширина, чтобы длина шкалы слева не зависела от числа */}
         <div style={{ width: 64, textAlign: 'right', flexShrink: 0 }}>
-          <div style={{ fontSize: 16, fontWeight: 900, color: accent, letterSpacing: '-0.5px', lineHeight: 1, textShadow: isChallenger ? `0 0 10px ${CHALL}` : 'none' }}>
-            {p.elo.toLocaleString()}
+          <div style={{ fontSize: 16, fontWeight: 900, color: calibrating ? '#EAB308' : accent, letterSpacing: '-0.5px', lineHeight: 1, textShadow: isChallenger ? `0 0 10px ${CHALL}` : 'none' }}>
+            {calibrating ? `${p.matchesPlayed}/10` : p.elo.toLocaleString()}
           </div>
-          <div style={{ fontSize: 8, color: '#374151', fontWeight: 700, marginTop: 3, letterSpacing: '0.08em' }}>ELO</div>
+          <div style={{ fontSize: 8, color: '#374151', fontWeight: 700, marginTop: 3, letterSpacing: '0.08em' }}>{calibrating ? 'КАЛИБР.' : 'ELO'}</div>
         </div>
       </div>
     </motion.div>
@@ -270,7 +272,8 @@ export default function LeaderboardPage() {
   const rest   = list.filter(p => p.rank > 3)
 
   const myElo = user?.elo ?? 0
-  const meChallenger = !!user && qualifiesChallenger(myElo, myRank)
+  const meCalibrating = ((user?.matchesPlayed as number) ?? 0) < 10
+  const meChallenger = !!user && !meCalibrating && qualifiesChallenger(myElo, myRank)
   const myTheme = meChallenger ? CHALLENGER_RANK : getEloRank(myElo)
 
   return (
@@ -346,17 +349,20 @@ export default function LeaderboardPage() {
                 }}
               >
                 <div style={{ position: 'absolute', right: -24, top: -24, width: 120, height: 120, background: `radial-gradient(circle, ${myTheme.color}22, transparent 70%)`, pointerEvents: 'none' }} />
-                <div style={{ filter: `drop-shadow(0 0 12px ${myTheme.color}66)`, position: 'relative', flexShrink: 0 }}>
-                  <EloRing elo={myElo} size={50} isChallenger={meChallenger} showLabel={false} />
+                <div style={{ filter: `drop-shadow(0 0 12px ${meCalibrating ? '#EAB308' : myTheme.color}66)`, position: 'relative', flexShrink: 0 }}>
+                  <EloRing elo={myElo} size={50} isChallenger={meChallenger} showLabel={false} calibrating={meCalibrating} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
                   <div style={{ fontSize: 9, color: '#9CA3AF', fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 2 }}>Ваше место</div>
-                  <div style={{ fontSize: 13, fontWeight: 900, color: myTheme.color, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                    {meChallenger ? <><Icon name="crown" size={13} />Challenger</> : myTheme.label}
+                  <div style={{ fontSize: 13, fontWeight: 900, color: meCalibrating ? '#EAB308' : myTheme.color, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                    {meCalibrating ? <><Icon name="target" size={13} />Калибровка</> : meChallenger ? <><Icon name="crown" size={13} />Challenger</> : myTheme.label}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginTop: 3 }}>
-                    <span style={{ fontSize: 18, fontWeight: 900, color: '#fff', letterSpacing: '-0.6px' }}>{myElo.toLocaleString()}</span>
-                    <span style={{ fontSize: 10, color: '#6B7280', fontWeight: 700 }}>ELO</span>
+                    {meCalibrating ? (
+                      <><span style={{ fontSize: 18, fontWeight: 900, color: '#fff', letterSpacing: '-0.6px' }}>{user?.matchesPlayed ?? 0}/10</span><span style={{ fontSize: 10, color: '#EAB308', fontWeight: 700 }}>МАТЧЕЙ</span></>
+                    ) : (
+                      <><span style={{ fontSize: 18, fontWeight: 900, color: '#fff', letterSpacing: '-0.6px' }}>{myElo.toLocaleString()}</span><span style={{ fontSize: 10, color: '#6B7280', fontWeight: 700 }}>ELO</span></>
+                    )}
                   </div>
                 </div>
                 <div style={{ textAlign: 'center', position: 'relative', flexShrink: 0 }}>

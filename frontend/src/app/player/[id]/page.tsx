@@ -149,8 +149,10 @@ export default function PlayerPage() {
   if (!profile) return null
 
   const rank = getEloRank(profile.elo)
-  const isChallenger = qualifiesChallenger(profile.elo, playerRank)
+  const calibrating = (profile.matchesPlayed ?? 0) < 10
+  const isChallenger = !calibrating && qualifiesChallenger(profile.elo, playerRank)
   const theme = isChallenger ? CHALLENGER_RANK : rank
+  const accent = calibrating ? '#EAB308' : theme.color
   const displayName = profile.gameNickname || profile.firstName
   const warns = profile.warns ?? 0
   const rankProg = Math.round(getRankProgress(profile.elo) * 100)
@@ -287,18 +289,32 @@ export default function PlayerPage() {
                 transition={{ duration: 3.4, repeat: Infinity, ease: 'easeInOut' }}
                 style={{ filter: `drop-shadow(0 0 14px ${theme.color}77)`, position: 'relative', flexShrink: 0 }}
               >
-                <EloRing elo={profile.elo} size={72} isChallenger={isChallenger} showLabel={false} />
+                <EloRing elo={profile.elo} size={72} isChallenger={isChallenger} showLabel={false} calibrating={calibrating} />
               </motion.div>
               <div style={{ textAlign: 'left', position: 'relative' }}>
                 <div style={{ fontSize: 9, color: '#6B7280', fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 3 }}>Ранг игрока</div>
-                <div style={{ fontSize: 18, fontWeight: 900, color: theme.color, lineHeight: 1, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                  {isChallenger ? <><Icon name="crown" size={16} />Challenger</> : theme.label}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginTop: 6 }}>
-                  <span style={{ fontSize: 22, fontWeight: 900, color: '#fff', letterSpacing: '-0.8px', lineHeight: 1 }}>{profile.elo.toLocaleString()}</span>
-                  <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 700 }}>ELO</span>
-                  {playerRank && <span style={{ fontSize: 11, color: theme.color, fontWeight: 800 }}>#{playerRank}</span>}
-                </div>
+                {calibrating ? (
+                  <>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: accent, lineHeight: 1, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                      <Icon name="target" size={15} color={accent} />Калибровка
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginTop: 6 }}>
+                      <span style={{ fontSize: 22, fontWeight: 900, color: '#fff', letterSpacing: '-0.8px', lineHeight: 1 }}>{profile.matchesPlayed}<span style={{ fontSize: 14, color: '#6B7280' }}>/10</span></span>
+                      <span style={{ fontSize: 11, color: accent, fontWeight: 800, textTransform: 'uppercase' }}>матчей</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: theme.color, lineHeight: 1, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                      {isChallenger ? <><Icon name="crown" size={16} />Challenger</> : theme.label}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginTop: 6 }}>
+                      <span style={{ fontSize: 22, fontWeight: 900, color: '#fff', letterSpacing: '-0.8px', lineHeight: 1 }}>{profile.elo.toLocaleString()}</span>
+                      <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 700 }}>ELO</span>
+                      {playerRank && <span style={{ fontSize: 11, color: theme.color, fontWeight: 800 }}>#{playerRank}</span>}
+                    </div>
+                  </>
+                )}
               </div>
             </motion.div>
 
@@ -319,20 +335,29 @@ export default function PlayerPage() {
             )}
           </div>
 
-          {/* Progress to next rank */}
+          {/* Прогресс: ранг или калибровка */}
           <div style={{ marginTop: 18, position: 'relative' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, fontSize: 10, color: '#6B7280', fontWeight: 600 }}>
-              <span style={{ color: theme.color }}>{theme.label}</span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                {nextRank ? `${eloToNext} ELO до ${nextRank.label}` : <><Icon name="crown" size={11} />Макс. ранг</>}
-              </span>
+              {calibrating ? (
+                <>
+                  <span style={{ color: accent }}>Калибровка</span>
+                  <span>Осталось матчей: {10 - profile.matchesPlayed}</span>
+                </>
+              ) : (
+                <>
+                  <span style={{ color: theme.color }}>{theme.label}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    {nextRank ? `${eloToNext} ELO до ${nextRank.label}` : <><Icon name="crown" size={11} />Макс. ранг</>}
+                  </span>
+                </>
+              )}
             </div>
             <div style={{ height: 7, background: 'rgba(255,255,255,0.06)', borderRadius: 4, overflow: 'hidden' }}>
               <motion.div
                 initial={{ width: 0 }}
-                animate={{ width: `${nextRank ? rankProg : 100}%` }}
+                animate={{ width: `${calibrating ? Math.round((profile.matchesPlayed / 10) * 100) : (nextRank ? rankProg : 100)}%` }}
                 transition={{ duration: 1.2, ease: 'easeOut', delay: 0.3 }}
-                style={{ height: '100%', borderRadius: 4, background: `linear-gradient(90deg, ${theme.color}aa, ${theme.color})`, boxShadow: `0 0 10px ${theme.color}88` }}
+                style={{ height: '100%', borderRadius: 4, background: `linear-gradient(90deg, ${accent}aa, ${accent})`, boxShadow: `0 0 10px ${accent}88` }}
               />
             </div>
           </div>

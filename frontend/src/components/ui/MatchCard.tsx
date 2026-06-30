@@ -23,6 +23,7 @@ export interface MatchItem {
   ratingMatch: number
   kdSubmitted: boolean
   createdAt: string
+  calibration?: boolean
 }
 
 /** Единая карточка матча — используется в профиле, истории и у других игроков. */
@@ -92,22 +93,30 @@ export function MatchCard({ m, fallbackElo, delay = 0 }: { m: MatchItem; fallbac
           </span>
         </div>
 
-        {/* Rank orb + ELO + delta */}
+        {/* Rank orb + ELO + delta (для калибровочных матчей ELO скрыт → «?») */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <EloRing elo={orbElo} size={32} showLabel={false} />
+          <EloRing elo={orbElo} size={32} showLabel={false} calibrating={!!m.calibration} />
 
-          {(m.eloAfter ?? 0) > 0 && (
-            <span style={{ fontSize: 15, fontWeight: 800, color: '#fff', letterSpacing: '-0.3px', textShadow: '0 1px 5px rgba(0,0,0,0.8)' }}>{(m.eloAfter as number).toLocaleString('ru-RU')}</span>
-          )}
-          {m.kdSubmitted && dlt !== 0 && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: dlt > 0 ? GREEN : RED, fontWeight: 800, fontSize: 13, textShadow: '0 1px 4px rgba(0,0,0,0.7)' }}>
-              <span style={{
-                width: 0, height: 0,
-                borderLeft: '4px solid transparent', borderRight: '4px solid transparent',
-                ...(dlt > 0 ? { borderBottom: `6px solid ${GREEN}` } : { borderTop: `6px solid ${RED}` }),
-              }} />
-              {Math.abs(dlt)}
+          {m.calibration ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: YELLOW, fontWeight: 800, fontSize: 13, textShadow: '0 1px 4px rgba(0,0,0,0.7)' }}>
+              <Icon name="target" size={13} color={YELLOW} />Калибровка · <span style={{ fontWeight: 900, fontSize: 15 }}>?</span>
             </span>
+          ) : (
+            <>
+              {(m.eloAfter ?? 0) > 0 && (
+                <span style={{ fontSize: 15, fontWeight: 800, color: '#fff', letterSpacing: '-0.3px', textShadow: '0 1px 5px rgba(0,0,0,0.8)' }}>{(m.eloAfter as number).toLocaleString('ru-RU')}</span>
+              )}
+              {m.kdSubmitted && dlt !== 0 && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: dlt > 0 ? GREEN : RED, fontWeight: 800, fontSize: 13, textShadow: '0 1px 4px rgba(0,0,0,0.7)' }}>
+                  <span style={{
+                    width: 0, height: 0,
+                    borderLeft: '4px solid transparent', borderRight: '4px solid transparent',
+                    ...(dlt > 0 ? { borderBottom: `6px solid ${GREEN}` } : { borderTop: `6px solid ${RED}` }),
+                  }} />
+                  {Math.abs(dlt)}
+                </span>
+              )}
+            </>
           )}
         </div>
 

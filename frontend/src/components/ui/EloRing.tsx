@@ -7,7 +7,11 @@ interface EloRingProps {
   size?: number
   isChallenger?: boolean
   showLabel?: boolean
+  /** Во время калибровки: жёлтое кольцо со знаком «?» вместо ранга */
+  calibrating?: boolean
 }
+
+const CALIBRATION_COLOR = '#EAB308'
 
 /**
  * Rank emblem. Designed orb images live in /public/ranks
@@ -15,9 +19,10 @@ interface EloRingProps {
  * radial mask (blends into the dark core), wrapped in a rank-colored
  * gradient ring frame. Optional label below.
  */
-export function EloRing({ elo, size = 64, isChallenger = false, showLabel = true }: EloRingProps) {
+export function EloRing({ elo, size = 64, isChallenger = false, showLabel = true, calibrating = false }: EloRingProps) {
   const rank = isChallenger ? CHALLENGER_RANK : getEloRank(elo)
-  const { color, label } = rank
+  const color = calibrating ? CALIBRATION_COLOR : rank.color
+  const label = calibrating ? 'Калибровка' : rank.label
   // ?v= — cache-bust: у статики max-age 4ч, без смены URL клиенты
   // (Telegram webview) держат старую картинку после обновления набора
   const RANKS_V = 2
@@ -59,22 +64,33 @@ export function EloRing({ elo, size = 64, isChallenger = false, showLabel = true
             overflow: 'hidden',
           }}
         >
-          <img
-            src={img}
-            alt={label}
-            width={imgSize}
-            height={imgSize}
-            draggable={false}
-            style={{
-              display: 'block',
-              width: imgSize,
-              height: imgSize,
-              objectFit: 'cover',
+          {calibrating ? (
+            <span style={{
+              fontSize: Math.round(size * 0.5),
+              fontWeight: 900,
+              color: CALIBRATION_COLOR,
+              lineHeight: 1,
+              textShadow: `0 0 ${Math.round(size * 0.18)}px ${CALIBRATION_COLOR}aa`,
               userSelect: 'none',
-              WebkitMaskImage: feather,
-              maskImage: feather,
-            }}
-          />
+            }}>?</span>
+          ) : (
+            <img
+              src={img}
+              alt={label}
+              width={imgSize}
+              height={imgSize}
+              draggable={false}
+              style={{
+                display: 'block',
+                width: imgSize,
+                height: imgSize,
+                objectFit: 'cover',
+                userSelect: 'none',
+                WebkitMaskImage: feather,
+                maskImage: feather,
+              }}
+            />
+          )}
         </div>
       </div>
       {showLabel && (

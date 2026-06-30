@@ -67,7 +67,7 @@ export function StreamerWidget({ stats }: { stats: ObsStats }) {
       {/* ── Main row (вертикально отцентрирован) ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 15, position: 'relative' }}>
         {/* Circular rank badge (как во всех разделах) */}
-        <EloRing elo={stats.elo} size={62} showLabel={false} />
+        <EloRing elo={stats.elo} size={62} showLabel={false} calibrating={stats.calibrating} />
 
         {/* Nick + ELO / calibration */}
         <div style={{ minWidth: 0, width: 168 }}>

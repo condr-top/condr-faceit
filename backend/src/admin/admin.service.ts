@@ -601,28 +601,26 @@ export class AdminService implements OnModuleInit {
   ): number {
     if (draw) return 0;
 
-    if (isCalibration) {
-      return won ? 80 : -40;
-    }
-
+    // Базовое (обычное) изменение — как если бы это НЕ была калибровка
     const diff = Math.abs(avgEloMyTeam - avgEloOpponent);
     const isFavorite = avgEloMyTeam >= avgEloOpponent;
 
+    let change: number;
     if (diff < 100) {
-      return won ? 25 : -25;
+      change = won ? 25 : -25;
     } else if (diff < 200) {
-      return won
-        ? isFavorite ? 22 : 28
-        : isFavorite ? -28 : -22;
+      change = won ? (isFavorite ? 22 : 28) : (isFavorite ? -28 : -22);
     } else if (diff < 300) {
-      return won
-        ? isFavorite ? 18 : 32
-        : isFavorite ? -32 : -18;
+      change = won ? (isFavorite ? 18 : 32) : (isFavorite ? -32 : -18);
     } else {
-      return won
-        ? isFavorite ? 15 : 35
-        : isFavorite ? -35 : -15;
+      change = won ? (isFavorite ? 15 : 35) : (isFavorite ? -35 : -15);
     }
+
+    // Калибровка: победа ×2 к начислению, поражение ×1.5 к снятию. Округляем.
+    if (isCalibration) {
+      change = won ? change * 2 : change * 1.5;
+    }
+    return Math.round(change);
   }
 
   /**

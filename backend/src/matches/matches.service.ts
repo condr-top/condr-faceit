@@ -1294,6 +1294,12 @@ export class MatchesService {
       };
     });
 
+    // Помечаем калибровочные матчи: первые 10 (хронологически) у игрока.
+    // Для них в истории скрываем изменение ELO (показываем «?»).
+    [...merged]
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+      .forEach((m, i) => { (m as any).calibration = i < 10; });
+
     merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     const total = merged.length;
     return { matches: merged.slice(skip, skip + limit), total, page, limit };

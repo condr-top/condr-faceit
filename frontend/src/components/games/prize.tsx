@@ -50,12 +50,13 @@ export function PrizeIcon({ prize, size = 44 }: { prize: GamePrize; size?: numbe
 }
 
 /** Карточка приза для ленты кейса (вертикальная плитка с цветом редкости). */
-export function PrizeCell({ prize, w, h }: { prize: GamePrize; w: number; h: number }) {
+export function PrizeCell({ prize, w, h }: { prize: GamePrize; w?: number; h: number }) {
   const rc = RARITY[prize.rarity] || RARITY.common
+  const iconSize = Math.min(w ?? h, h) * 0.42
   return (
-    <div style={{ width: w, height: h, flexShrink: 0, borderRadius: 12, position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, background: `linear-gradient(180deg, ${rc.c}22, #0c0c11 70%)`, border: `1px solid ${rc.c}55`, margin: '0 4px' }}>
+    <div style={{ width: w ?? '100%', height: h, flexShrink: 0, borderRadius: 12, position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, background: `linear-gradient(180deg, ${rc.c}22, #0c0c11 70%)`, border: `1px solid ${rc.c}55`, margin: w ? '0 4px' : 0 }}>
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: rc.c, boxShadow: `0 0 10px ${rc.glow}` }} />
-      <PrizeIcon prize={prize} size={Math.min(w, h) * 0.42} />
+      <PrizeIcon prize={prize} size={iconSize} />
       <div style={{ fontSize: 10, fontWeight: 700, color: '#cbd5e1', textAlign: 'center', padding: '0 6px', lineHeight: 1.2 }}>{prize.label}</div>
     </div>
   )

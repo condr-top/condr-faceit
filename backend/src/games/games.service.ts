@@ -8,11 +8,22 @@ import { CASE, WHEEL, SLOTS, Prize, pickWeighted, DUPLICATE_COINS } from './game
 export class GamesService {
   constructor(@InjectRepository(User) private userRepo: Repository<User>) {}
 
-  /** Публичный конфиг для фронта (без раскрытия точных шансов). */
+  /** Шансы по редкостям (агрегируем веса). */
+  private rarityOdds(items: Prize[]) {
+    const order = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic'];
+    const total = items.reduce((s, p) => s + p.weight, 0);
+    const byR: Record<string, number> = {};
+    for (const p of items) byR[p.rarity] = (byR[p.rarity] || 0) + p.weight;
+    return order
+      .filter((r) => byR[r])
+      .map((r) => ({ rarity: r, chance: Math.round((byR[r] / total) * 1000) / 10 }));
+  }
+
+  /** Публичный конфиг для фронта (шансы — только агрегированные по редкости). */
   getConfig() {
     const strip = (p: Prize) => ({ id: p.id, kind: p.kind, label: p.label, rarity: p.rarity, amount: p.amount, key: p.key, days: p.days });
     return {
-      case: { name: CASE.name, cost: CASE.cost, prizes: CASE.prizes.map(strip) },
+      case: { name: CASE.name, cost: CASE.cost, prizes: CASE.prizes.map(strip), odds: this.rarityOdds(CASE.prizes) },
       wheel: { name: WHEEL.name, cost: WHEEL.cost, segments: WHEEL.segments.map(strip) },
       slots: {
         name: SLOTS.name, cost: SLOTS.cost,

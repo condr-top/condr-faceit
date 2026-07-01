@@ -49,7 +49,7 @@ export function Avatar({ avatarUrl, name, size = 32, className = '', style, fram
 
   // Чёткое кольцо-рамка: полный круг-градиент СЗАДИ, аватар сверху перекрывает
   // центр (без CSS-маски → нет «пиксельных» краёв). Толщина масштабируется.
-  const band = Math.max(3, Math.round(size * 0.1))
+  const band = Math.max(2, Math.round(size * 0.07))
   const outer = size + band * 2
   return (
     <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: outer, height: outer, flexShrink: 0, lineHeight: 0 }}>

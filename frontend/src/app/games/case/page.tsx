@@ -7,18 +7,20 @@ import { api } from '@/lib/api'
 import { useAuthStore } from '@/store/authStore'
 import { RequireRegistration } from '@/components/providers/RequireRegistration'
 import { Icon } from '@/components/ui/Icon'
-import { PrizeCell, GamePrize } from '@/components/games/prize'
+import { PrizeCell, GamePrize, RARITY } from '@/components/games/prize'
 import { GameResult } from '@/components/games/GameResult'
+import { AnimatePresence } from 'framer-motion'
 
 const CELL = 96, STEP = CELL + 8, LAND = 45, REEL_LEN = 52
 
 export default function CasePage() {
   const router = useRouter()
   const { user, refreshUser } = useAuthStore()
-  const [cfg, setCfg] = useState<{ name: string; cost: number; prizes: GamePrize[] } | null>(null)
+  const [cfg, setCfg] = useState<{ name: string; cost: number; prizes: GamePrize[]; odds: { rarity: string; chance: number }[] } | null>(null)
   const [reel, setReel] = useState<GamePrize[]>([])
   const [spinning, setSpinning] = useState(false)
   const [result, setResult] = useState<GamePrize | null | undefined>(undefined)
+  const [showOdds, setShowOdds] = useState(false)
   const trackRef = useRef<HTMLDivElement>(null)
   const controls = useAnimationControls()
 
@@ -84,6 +86,44 @@ export default function CasePage() {
             style={{ width: '100%', padding: '16px 0', borderRadius: 16, border: 'none', cursor: spinning ? 'default' : 'pointer', fontSize: 16, fontWeight: 900, color: '#fff', background: spinning ? 'rgba(255,255,255,0.08)' : 'linear-gradient(135deg, #E8092E, #b3001f)', boxShadow: spinning ? 'none' : '0 8px 28px rgba(232,9,46,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             {spinning ? 'Открываем…' : <>Открыть · <Icon name="coins" size={17} color="#fff" /> {cfg?.cost ?? '—'}</>}
           </motion.button>
+        </div>
+
+        {/* Содержимое кейса */}
+        <div style={{ padding: '22px 14px 0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <span style={{ fontSize: 13, fontWeight: 900, color: '#fff', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Содержимое кейса</span>
+            <button onClick={() => setShowOdds(v => !v)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: showOdds ? 'rgba(232,9,46,0.14)' : 'rgba(255,255,255,0.05)', border: `1px solid ${showOdds ? 'rgba(232,9,46,0.4)' : 'rgba(255,255,255,0.1)'}`, borderRadius: 20, padding: '5px 11px', color: showOdds ? '#E8092E' : '#9CA3AF', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>
+              <Icon name="barChart" size={12} color={showOdds ? '#E8092E' : '#9CA3AF'} />Шансы
+            </button>
+          </div>
+
+          <AnimatePresence>
+            {showOdds && cfg && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                style={{ overflow: 'hidden', marginBottom: 14 }}>
+                <div style={{ borderRadius: 14, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)', padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {cfg.odds.map(o => {
+                    const rc = RARITY[o.rarity] || RARITY.common
+                    return (
+                      <div key={o.rarity} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                        <span style={{ width: 9, height: 9, borderRadius: '50%', background: rc.c, boxShadow: `0 0 6px ${rc.glow}`, flexShrink: 0 }} />
+                        <span style={{ fontSize: 12, fontWeight: 700, color: rc.c, width: 96 }}>{rc.name}</span>
+                        <div style={{ flex: 1, height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.07)', overflow: 'hidden' }}>
+                          <div style={{ width: `${Math.min(100, o.chance)}%`, height: '100%', borderRadius: 3, background: rc.c }} />
+                        </div>
+                        <span style={{ fontSize: 12, fontWeight: 800, color: '#fff', width: 46, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{o.chance}%</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+            {(cfg?.prizes ?? []).map((p, i) => <PrizeCell key={i} prize={p} h={104} />)}
+          </div>
         </div>
 
         {result !== undefined && <GameResult granted={result} onClose={() => setResult(undefined)} />}
